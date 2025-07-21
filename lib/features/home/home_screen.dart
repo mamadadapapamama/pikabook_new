@@ -13,6 +13,7 @@ import '../../core/theme/tokens/ui_tokens.dart';
 import '../../core/widgets/pika_app_bar.dart';
 import '../../core/widgets/dot_loading_indicator.dart';
 import '../../core/models/banner_type.dart';
+import '../../core/widgets/upgrade_modal.dart'; // 🎯 UpgradeModal 추가
 
 // 🎯 Feature imports
 import 'home_viewmodel.dart';
@@ -146,6 +147,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       
       // 신규 사용자인 경우 환영 모달 표시
       if (_isNewUser) {
+        // 🎉 신규 사용자 환영 모달 표시
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          Future.delayed(const Duration(milliseconds: 800), () {
+            if (mounted) {
+              _showWelcomeModal();
+            }
+          });
+        });
         return '신규';
       } else {
         return '기존';
@@ -158,6 +167,46 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       _isNewUser = true;
       return '신규';
     }
+  }
+
+  /// 🎉 환영 모달 표시
+  void _showWelcomeModal() {
+    if (kDebugMode) {
+      debugPrint('🎉 [HomeScreen] 환영 모달 표시');
+    }
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      isDismissible: false, // 온보딩 후에는 반드시 선택하도록
+      builder: (context) => UpgradeModal(reason: UpgradeReason.welcomeTrial),
+    ).then((result) async {
+      if (kDebugMode) {
+        debugPrint('✅ [HomeScreen] 환영 모달 완료');
+      }
+      
+      // 🎯 환영 모달 완료 기록을 Firestore에 저장
+      try {
+        final currentUser = FirebaseAuth.instance.currentUser;
+        if (currentUser != null) {
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(currentUser.uid)
+              .set({
+            'hasSeenWelcomeModal': true,
+          }, SetOptions(merge: true));
+          
+          if (kDebugMode) {
+            debugPrint('✅ [HomeScreen] 환영 모달 완료 기록 저장 완료');
+          }
+        }
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('❌ [HomeScreen] 환영 모달 완료 기록 저장 실패: $e');
+        }
+      }
+    });
   }
 
   /// 🎯 기본 상태 설정

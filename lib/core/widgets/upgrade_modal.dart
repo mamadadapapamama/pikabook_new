@@ -776,10 +776,17 @@ class UpgradeModal extends StatelessWidget {
     );
   }
 
-  /// 구매 처리 헬퍼
+  /// 구매 처리 헬퍼 (리팩토링된 버전)
   static Future<void> _handlePurchase(String productId) async {
     final purchaseService = InAppPurchaseService();
-    await purchaseService.buyProduct(productId);
+    final result = await purchaseService.buyProduct(productId);
+    
+    if (kDebugMode) {
+      debugPrint('🛒 [UpgradeModal] 구매 결과: ${result.success ? "성공" : "실패"}');
+      if (!result.success && result.errorMessage != null) {
+        debugPrint('   에러: ${result.errorMessage}');
+      }
+    }
   }
 
   /// 🛠️ Pending Transaction 해결 가이드 다이얼로그
@@ -978,24 +985,36 @@ class UpgradeModal extends StatelessWidget {
     resetModalState();
   }
 
-  /// 환영 모달에서 월간 구독 구매 처리 (7일 무료 체험)
+  /// 환영 모달에서 월간 구독 구매 처리 (7일 무료 체험) - 리팩토링된 버전
   static Future<void> _handleWelcomeTrialPurchase(String productId) async {
     final purchaseService = InAppPurchaseService();
-    // 무료체험 구매 시도
-    await purchaseService.buyProduct(productId);
+    final result = await purchaseService.buyProduct(productId);
+    
+    if (kDebugMode) {
+      debugPrint('🛒 [UpgradeModal] 무료체험 구매 결과: ${result.success ? "성공" : "실패"}');
+      if (!result.success && result.errorMessage != null) {
+        debugPrint('   에러: ${result.errorMessage}');
+      }
+    }
   }
 
-  /// 환영 모달에서 연간 구독 구매 처리 (즉시 결제)
+  /// 환영 모달에서 연간 구독 구매 처리 (즉시 결제) - 리팩토링된 버전
   static Future<void> _handleWelcomeYearlyPurchase() async {
     final purchaseService = InAppPurchaseService();
-    // 연간 구독 구매 시도
-    await purchaseService.buyYearly();
+    final result = await purchaseService.buyYearly();
+    
+    if (kDebugMode) {
+      debugPrint('🛒 [UpgradeModal] 연간 구독 결과: ${result.success ? "성공" : "실패"}');
+      if (!result.success && result.errorMessage != null) {
+        debugPrint('   에러: ${result.errorMessage}');
+      }
+    }
   }
 }
 
 /// 업그레이드 유도 관련 유틸리티 클래스
 class UpgradePromptHelper {
-  /// 온보딩 완료 후 환영 모달 표시 (7일 무료체험 유도)
+  /// 온보딩 완료 후 환영 모달 표시 (7일 무료체험 유도) - 리팩토링된 버전
   static Future<void> showWelcomeTrialPrompt(
     BuildContext context, {
     required Function(bool userChoseTrial) onComplete,
@@ -1007,59 +1026,28 @@ class UpgradePromptHelper {
         print('🎉 [UpgradeModal] 환영 모달 표시 시작 (7일 무료체험 유도)');
       }
       
-      // InAppPurchaseService 구매 결과 콜백 설정
-      final purchaseService = InAppPurchaseService();
-      bool purchaseCompleted = false;
-      
-      purchaseService.setOnPurchaseResult((bool success, String? transactionId, String? error) {
-        if (kDebugMode) {
-          print('🛒 [UpgradeModal] 구매 결과 수신: success=$success, transactionId=$transactionId, error=$error');
-        }
-        
-        if (success) {
-          userChoseTrial = true;
-          purchaseCompleted = true;
-          if (kDebugMode) {
-            print('✅ [UpgradeModal] 구매 성공 - 무료체험 선택됨');
-          }
-        } else {
-          // 구매 실패 시 무료 플랜으로 처리
-          userChoseTrial = false;
-          purchaseCompleted = true;
-          if (kDebugMode) {
-            print('⚠️ [UpgradeModal] 구매 실패 - 무료 플랜으로 처리: $error');
-          }
-        }
-      });
-      
       final result = await UpgradeModal.show(
         context,
         reason: UpgradeReason.welcomeTrial,
-        // onUpgrade는 버튼 내에서 직접 처리  
+        onUpgrade: () async {
+          // 🎯 구매 처리를 직접 여기서 수행
+          final purchaseService = InAppPurchaseService();
+          final purchaseResult = await purchaseService.buyMonthly();
+          
+          if (kDebugMode) {
+            print('🛒 [UpgradeModal] 구매 결과: ${purchaseResult.success ? "성공" : "실패"}');
+            if (!purchaseResult.success && purchaseResult.errorMessage != null) {
+              print('   에러: ${purchaseResult.errorMessage}');
+            }
+          }
+          
+          userChoseTrial = purchaseResult.success;
+        },
       );
       
       // 모달 결과에 따라 처리
-      if (result == true) {
-        // "7일간 무료로 프리미엄 시작하기" 선택
-        if (kDebugMode) {
-          print('🎯 [UpgradeModal] 사용자가 무료체험 버튼 선택 - 구매 결과 대기');
-        }
-        
-        // 구매 완료까지 최대 1분 대기
-        int waitCount = 0;
-        while (!purchaseCompleted && waitCount < 600) { // 
-          await Future.delayed(Duration(milliseconds: 600));
-          waitCount++;
-        }
-        
-        if (!purchaseCompleted) {
-          if (kDebugMode) {
-            print('⏰ [UpgradeModal] 구매 결과 대기 타임아웃 - 무료 플랜으로 처리');
-          }
-          userChoseTrial = false;
-        }
-      } else {
-        // "나가기" 선택
+      if (result != true) {
+        // "나가기" 선택 또는 모달 취소
         userChoseTrial = false;
         if (kDebugMode) {
           print('🎯 [UpgradeModal] 사용자가 나가기 선택 - 무료 플랜');
@@ -1075,10 +1063,6 @@ class UpgradePromptHelper {
       }
       userChoseTrial = false;
     } finally {
-      // 구매 결과 콜백 해제
-      final purchaseService = InAppPurchaseService();
-      purchaseService.setOnPurchaseResult(null);
-      
       onComplete(userChoseTrial);
     }
   }
@@ -1177,9 +1161,9 @@ class UpgradePromptHelper {
     );
   }
 
-  /// 업그레이드 처리 (인앱 구매 연동)
-  static void _handleUpgrade() {
+  /// 업그레이드 처리 (인앱 구매 연동) - 리팩토링된 버전
+  static Future<void> _handleUpgrade() async {
     // 기본적으로 월간 구독으로 연결
-    UpgradeModal._handlePurchase(InAppPurchaseService.premiumMonthlyId);
+    await UpgradeModal._handlePurchase(InAppPurchaseService.premiumMonthlyId);
   }
 }

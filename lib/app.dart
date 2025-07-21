@@ -68,6 +68,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   final InAppPurchaseService _purchaseService = InAppPurchaseService();
 
   final GlobalKey<ScaffoldMessengerState> _scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
   
   @override
   void initState() {
@@ -93,7 +94,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     
     // 초기화 로직 시작
     _preferencesService = UserPreferencesService();
-    _purchaseService.setScaffoldMessengerKey(_scaffoldMessengerKey);
+    // 🎯 리팩토링으로 setScaffoldMessengerKey 제거됨 - UI 처리는 상위 레이어에서
     _initializeApp();
   }
   
@@ -508,6 +509,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       theme: AppTheme.lightTheme,
       scrollBehavior: const CustomScrollBehavior(),
       scaffoldMessengerKey: _scaffoldMessengerKey, // ScaffoldMessenger 키 설정
+      navigatorKey: _navigatorKey, // Navigator 키 설정
       home: _buildCurrentScreen(), // 상태에 따라 적절한 화면 위젯 반환
     );
   }
@@ -627,65 +629,24 @@ class _AppState extends State<App> with WidgetsBindingObserver {
                 debugPrint('🎉 [App] 온보딩 완료 - 홈 화면 이동 후 환영 모달 표시');
               }
 
-              // 🎯 온보딩 완료 후 잠시 대기하여 홈 화면이 완전히 로드된 후 환영 모달 표시
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                Future.delayed(const Duration(milliseconds: 500), () {
-                  if (mounted) {
-                    _showWelcomeModalAfterOnboarding();
-                  }
-                });
-              });
+              // 🎯 온보딩 완료 후 홈 화면으로 이동하고, 홈 화면에서 환영 모달 표시
+              // Navigator context 문제를 피하기 위해 HomeScreen에서 처리하도록 변경
+              if (kDebugMode) {
+                debugPrint('🎉 [App] 온보딩 완료 - 홈 화면으로 이동 (환영 모달은 HomeScreen에서 처리)');
+              }
             }
           },
     );
   }
 
-  /// 🎉 온보딩 완료 후 환영 모달 표시
+  /// 🎉 온보딩 완료 후 환영 모달 표시 (HomeScreen으로 이동)
+  /// Navigator context 문제를 피하기 위해 HomeScreen에서 처리하도록 변경
   void _showWelcomeModalAfterOnboarding() {
+    // 🗑️ 이 메서드는 더 이상 사용하지 않음
+    // 환영 모달은 HomeScreen에서 처리
     if (kDebugMode) {
-      debugPrint('🎉 [App] 온보딩 완료 후 환영 모달 표시');
+      debugPrint('ℹ️ [App] 환영 모달은 HomeScreen에서 처리됩니다');
     }
-
-    final context = _scaffoldMessengerKey.currentContext;
-    if (context == null) {
-      if (kDebugMode) {
-        debugPrint('❌ [App] Context를 찾을 수 없어 환영 모달 표시 실패');
-      }
-      return;
-    }
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      isDismissible: false, // 온보딩 후에는 반드시 선택하도록
-      builder: (context) => UpgradeModal(reason: UpgradeReason.welcomeTrial),
-    ).then((result) async {
-      if (kDebugMode) {
-        debugPrint('✅ [App] 온보딩 후 환영 모달 완료');
-      }
-      
-      // 🎯 환영 모달 완료 기록을 Firestore에 저장
-      try {
-        final currentUser = FirebaseAuth.instance.currentUser;
-        if (currentUser != null) {
-          await FirebaseFirestore.instance
-              .collection('users')
-              .doc(currentUser.uid)
-              .set({
-            'hasSeenWelcomeModal': true,
-          }, SetOptions(merge: true));
-          
-          if (kDebugMode) {
-            debugPrint('✅ [App] 환영 모달 완료 기록 저장 완료');
-          }
-        }
-      } catch (e) {
-        if (kDebugMode) {
-          debugPrint('❌ [App] 환영 모달 완료 기록 저장 실패: $e');
-        }
-      }
-    });
   }
   
   // 홈 화면 렌더링 실패 시 표시할 대체 UI

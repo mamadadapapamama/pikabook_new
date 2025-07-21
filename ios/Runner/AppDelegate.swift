@@ -15,6 +15,9 @@ import FirebaseMessaging
     UNUserNotificationCenter.current().delegate = self
     application.registerForRemoteNotifications()
     
+    // 키보드 관련 설정 추가
+    configureKeyboardSettings()
+    
     // Flutter 채널 설정
     let controller : FlutterViewController = window?.rootViewController as! FlutterViewController
     let screenshotChannel = FlutterMethodChannel(name: "com.example.pikabook/screenshot",
@@ -67,6 +70,30 @@ import FirebaseMessaging
       name: UIApplication.userDidTakeScreenshotNotification,
       object: nil
     )
+  }
+  
+  /// 키보드 관련 설정
+  private func configureKeyboardSettings() {
+    // 키보드 자동 조정 비활성화
+    NotificationCenter.default.addObserver(
+      forName: UIResponder.keyboardWillShowNotification,
+      object: nil,
+      queue: .main
+    ) { notification in
+      // 키보드 표시 시 추가 처리
+      if let keyboardFrame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect {
+        print("📱 [Keyboard] 키보드 표시: \(keyboardFrame)")
+      }
+    }
+    
+    // 키보드 숨김 시 처리
+    NotificationCenter.default.addObserver(
+      forName: UIResponder.keyboardWillHideNotification,
+      object: nil,
+      queue: .main
+    ) { _ in
+      print("📱 [Keyboard] 키보드 숨김")
+    }
   }
   
   private func setupAppStoreReceiptChannel() {

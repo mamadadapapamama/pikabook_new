@@ -8,16 +8,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:async'; // Completer 추가
 
 /// 사용자 설정을 관리하는 서비스 (캐시 없이 직접 DB 조회)
-/// 
-/// **캐시 제거 이유:**
-/// - 사용자 설정은 중요한 개인 데이터
-/// - 항상 최신 상태 보장 필요
-/// - 캐시로 인한 불일치 방지
-/// 
-/// **동작 방식:**
-/// - 모든 조회는 SharedPreferences에서 직접 수행
-/// - 중요한 설정만 Firestore에 저장
-/// - 클라이언트 측 캐시 없음
+
 class UserPreferencesService {
   static const String _preferencesKey = 'user_preferences';
   static const String _currentUserIdKey = 'current_user_id';
@@ -32,8 +23,6 @@ class UserPreferencesService {
   // 🎯 중복 호출 방지
   Future<UserPreferences>? _ongoingLoadOperation;
   
-  // 🎯 캐시 제거 - 이벤트 캐시 매니저 사용 안 함
-  // final EventCacheManager _eventCache = EventCacheManager();
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;

@@ -378,12 +378,15 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           statusBarBrightness: Brightness.light, // iOS용
         ),
       ),
-      body: Container(
-        width: safeWidth,
-        height: safeHeight,
-        decoration: BoxDecoration(
-          color: ColorTokens.background, // 디자인 토큰 사용
-        ),
+      backgroundColor: ColorTokens.background,
+      // 키보드가 올라올 때 화면 조정 허용
+      resizeToAvoidBottomInset: true,
+      // 키보드 관련 설정 추가
+      body: GestureDetector(
+        onTap: () {
+          // 화면 터치 시 키보드 숨기기
+          FocusScope.of(context).unfocus();
+        },
         child: SafeArea(
           child: Padding(
             padding: EdgeInsets.symmetric(
@@ -486,8 +489,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           ),
         ),
       ),
-      // 키보드가 올라올 때 화면 조정 허용
-      resizeToAvoidBottomInset: true,
     );
   }
 
@@ -613,6 +614,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             child: TextField(
               controller: _nameController,
               textAlign: TextAlign.center,
+              keyboardType: TextInputType.text,
+              enableSuggestions: false,
+              autocorrect: false,
               decoration: InputDecoration(
                 hintText: '앱에서 쓸 이름이나 별명',
                 hintStyle: TypographyTokens.body1.copyWith(
@@ -724,6 +728,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           child: TextField(
                             controller: _customPurposeController,
                             autofocus: true,
+                            keyboardType: TextInputType.text,
+                            enableSuggestions: false,
+                            autocorrect: false,
                             decoration: InputDecoration(
                               hintText: '구체적인 사용 목적을 입력해주세요',
                               hintStyle: TypographyTokens.body1.copyWith(

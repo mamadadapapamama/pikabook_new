@@ -9,6 +9,130 @@ import '../subscription/unified_subscription_manager.dart';
 import '../notification/notification_service.dart';
 import '../../constants/subscription_constants.dart';
 
+/// 🎯 구매 결과 모델
+class PurchaseResult {
+  final bool success;
+  final String? transactionId;
+  final String? productId;
+  final String? errorMessage;
+  final String? successMessage;
+  final Map<String, dynamic>? serverResponse;
+  
+  const PurchaseResult({
+    required this.success,
+    this.transactionId,
+    this.productId,
+    this.errorMessage,
+    this.successMessage,
+    this.serverResponse,
+  });
+  
+  factory PurchaseResult.success({
+    required String transactionId,
+    required String productId,
+    String? successMessage,
+    Map<String, dynamic>? serverResponse,
+  }) {
+    return PurchaseResult(
+      success: true,
+      transactionId: transactionId,
+      productId: productId,
+      successMessage: successMessage ?? SubscriptionConstants.getPurchaseSuccessMessage(productId),
+      serverResponse: serverResponse,
+    );
+  }
+  
+  factory PurchaseResult.failure({
+    String? transactionId,
+    String? productId,
+    required String errorMessage,
+  }) {
+    return PurchaseResult(
+      success: false,
+      transactionId: transactionId,
+      productId: productId,
+      errorMessage: errorMessage,
+    );
+  }
+}
+
+/// 🎯 구매 성공 처리 핸들러 (책임 분리)
+class PurchaseSuccessHandler {
+  final UnifiedSubscriptionManager _subscriptionManager;
+  final NotificationService _notificationService;
+  
+  PurchaseSuccessHandler({
+    UnifiedSubscriptionManager? subscriptionManager,
+    NotificationService? notificationService,
+  }) : _subscriptionManager = subscriptionManager ?? UnifiedSubscriptionManager(),
+       _notificationService = notificationService ?? NotificationService();
+  
+  /// 구매 성공 시 상태 업데이트 및 알림 처리
+  Future<PurchaseResult> handleSuccess(
+    PurchaseDetails details,
+    Map<String, dynamic> serverResponse,
+  ) async {
+    try {
+      // 1. 상태 업데이트
+      _subscriptionManager.updateStateWithServerResponse(serverResponse);
+      
+      // 2. 알림 스케줄링 (무료체험 구매 시에만)
+      if (_shouldScheduleNotifications(details.productID, serverResponse)) {
+        await _scheduleNotifications(details);
+      }
+      
+      return PurchaseResult.success(
+        transactionId: details.purchaseID ?? '',
+        productId: details.productID,
+        serverResponse: serverResponse,
+      );
+    } catch (e) {
+      PurchaseLogger.error('Purchase success handling failed: $e');
+      return PurchaseResult.failure(
+        transactionId: details.purchaseID,
+        productId: details.productID,
+        errorMessage: '구매 처리 중 오류가 발생했습니다.',
+      );
+    }
+  }
+  
+  /// 알림 스케줄링이 필요한지 확인 (무료체험 구매 시에만)
+  bool _shouldScheduleNotifications(String productId, Map<String, dynamic> serverResponse) {
+    // 🎯 월간 구독이 아니면 알림 설정 안 함
+    if (productId != InAppPurchaseService.premiumMonthlyId) {
+      return false;
+    }
+    
+    // 🎯 서버 응답에서 무료체험 여부 확인
+    final entitlement = serverResponse['entitlement'] as String?;
+    final subscriptionStatus = serverResponse['subscriptionStatus'];
+    
+    // entitlement가 'TRIAL'이거나 subscriptionStatus가 8(TRIAL)인 경우에만 알림 설정
+    final isTrial = entitlement?.toUpperCase() == 'TRIAL' || subscriptionStatus == 8;
+    
+    if (kDebugMode) {
+      PurchaseLogger.info('🔔 알림 스케줄링 체크:');
+      PurchaseLogger.info('   - productId: $productId');
+      PurchaseLogger.info('   - entitlement: $entitlement');
+      PurchaseLogger.info('   - subscriptionStatus: $subscriptionStatus');
+      PurchaseLogger.info('   - isTrial: $isTrial');
+    }
+    
+    return isTrial;
+  }
+  
+  /// 알림 스케줄링
+  Future<void> _scheduleNotifications(PurchaseDetails details) async {
+    try {
+      await _notificationService.scheduleTrialEndNotifications(DateTime.now());
+      PurchaseLogger.info('Notifications scheduled for ${details.productID}');
+    } catch (e) {
+      PurchaseLogger.error('Failed to schedule notifications: $e');
+      // 알림 실패는 구매 성공에 영향을 주지 않음
+    }
+  }
+}
+
 /// 🎯 구매 상태 관리
 class PurchaseState {
   final bool isInitialized;
@@ -79,10 +203,9 @@ class PurchaseErrorHandler {
   }
 }
 
-/// 🛒 구매 결과 콜백
-typedef PurchaseResultCallback = void Function(bool success, String? transactionId, String? error);
 
-/// 🚀 In-App Purchase 서비스 (최적화된 버전)
+
+/// 🚀 In-App Purchase 서비스 (리팩토링된 버전)
 class InAppPurchaseService {
   static final InAppPurchaseService _instance = InAppPurchaseService._internal();
   factory InAppPurchaseService() => _instance;
@@ -90,23 +213,22 @@ class InAppPurchaseService {
 
   // 🎯 의존성
   final InAppPurchase _inAppPurchase = InAppPurchase.instance;
-  final NotificationService _notificationService = NotificationService();
+  final PurchaseSuccessHandler _successHandler = PurchaseSuccessHandler();
   
   // 🎯 상태 관리
   PurchaseState _state = const PurchaseState();
   
-  // 🎯 활성 구매 추적
-  final Map<String, Completer<bool>> _activePurchases = {};
+  // 🎯 구매 스트림 관리
   StreamSubscription<List<PurchaseDetails>>? _purchaseSubscription;
   
-  // 🎯 처리된 거래 추적 (재시도 가능하도록 개선)
-  final Map<String, int> _processingAttempts = {}; // 거래별 시도 횟수
-  final Map<String, DateTime> _lastProcessTime = {}; // 마지막 처리 시간
-  static const int maxRetryAttempts = 3;
-  static const Duration retryInterval = Duration(minutes: 1);
+  // 🎯 처리된 거래 추적 (중복 방지)
+  final Map<String, int> _processingAttempts = {};
+  final Map<String, DateTime> _lastProcessTime = {};
+  final Set<String> _successfullyProcessed = {};
+  final Map<String, String> _processedJWS = {}; // JWS 해시 -> 거래 ID
   
-  // 🎯 콜백
-  GlobalKey<ScaffoldMessengerState>? _scaffoldMessengerKey;
+  static const int maxRetryAttempts = 3;
+  static const Duration retryInterval = Duration(minutes: 5);
   
   // 🎯 상품 ID
   static const String premiumMonthlyId = 'premium_monthly';
@@ -135,19 +257,14 @@ class InAppPurchaseService {
         return;
       }
 
-      // 🔄 (디버그용) 앱 시작 시 미완료 거래를 정리하여 무한 루프 방지
-      if (kDebugMode) {
-        await clearPendingTransactions();
-      }
+      // 🔄 앱 시작 시 미완료 거래 정리 (항상 실행)
+      await clearPendingTransactions();
 
-      // 🧹 오래된 처리 기록 정리 (메모리 누수 방지)
-      _processingAttempts.clear();
-      _lastProcessTime.clear();
+      // 🧹 처리 기록 초기화
+      _clearProcessingRecords();
 
       await _loadProducts();
-
-      // 지속적인 구매 감지 리스너 시작
-      _startContinuousPurchaseListener();
+      _startPurchaseListener();
 
       _state = _state.copyWith(
         isInitialized: true,
@@ -177,286 +294,266 @@ class InAppPurchaseService {
     }
   }
 
-  /// 🛒 구매 실행
-  Future<bool> buyProduct(String productId) async {
+  /// 🛒 구매 실행 (단순화된 버전)
+  Future<PurchaseResult> buyProduct(String productId) async {
     await _ensureInitialized();
     
-    // 중복 구매 방지
-    if (_activePurchases.containsKey(productId)) {
-      PurchaseLogger.warning('Purchase already in progress for $productId');
-      return _activePurchases[productId]!.future;
+    if (_state.isPurchasing) {
+      return PurchaseResult.failure(
+        productId: productId,
+        errorMessage: '이미 구매가 진행 중입니다.',
+      );
     }
     
-    final completer = Completer<bool>();
-    _activePurchases[productId] = completer;
-    
+    final product = _getProductById(productId);
+    if (product == null) {
+      return PurchaseResult.failure(
+        productId: productId,
+        errorMessage: '상품을 찾을 수 없습니다.',
+      );
+    }
+
     try {
       _state = _state.copyWith(isPurchasing: true);
-      await _executePurchase(productId, completer);
-      return await completer.future;
+      PurchaseLogger.info('Starting purchase for: $productId');
+      
+      // 🎯 단순화: purchaseStream에서 결과를 기다림
+      final success = await _inAppPurchase.buyNonConsumable(
+        purchaseParam: PurchaseParam(productDetails: product),
+      );
+      
+      if (!success) {
+        return PurchaseResult.failure(
+          productId: productId,
+          errorMessage: '구매를 시작할 수 없습니다.',
+        );
+      }
+      
+      // 🎯 구매 시작 성공 - 실제 결과는 purchaseStream에서 처리
+      return PurchaseResult.success(
+        transactionId: '', // purchaseStream에서 업데이트됨
+        productId: productId,
+        successMessage: '구매가 시작되었습니다.',
+      );
+      
     } catch (e) {
-      PurchaseLogger.error('Purchase execution failed: $e');
-      if (!completer.isCompleted) completer.complete(false);
-      return false;
+      PurchaseLogger.error('Purchase failed: $e');
+      return PurchaseResult.failure(
+        productId: productId,
+        errorMessage: '구매 중 오류가 발생했습니다.',
+      );
     } finally {
-      _activePurchases.remove(productId);
       _state = _state.copyWith(isPurchasing: false);
     }
   }
 
-  /// ⚡ 구매 실행 로직
-  Future<void> _executePurchase(String productId, Completer<bool> completer) async {
-    final product = _getProductById(productId);
-    if (product == null) {
-      PurchaseLogger.error('Product not found: $productId');
-      completer.complete(false);
-      return;
-    }
-
-    // 구매 시작
-    final success = await _inAppPurchase.buyNonConsumable(
-      purchaseParam: PurchaseParam(productDetails: product),
-    );
-    
-    if (!success) {
-      PurchaseLogger.error('Failed to start purchase for $productId');
-      completer.complete(false);
-    }
-  }
-
-  /// 🎧 단일 통합 구매 감지 리스너
-  void _startContinuousPurchaseListener() {
+  /// 🎧 구매 스트림 리스너 (단순화됨)
+  void _startPurchaseListener() {
     _purchaseSubscription = _inAppPurchase.purchaseStream.listen(
       (purchaseDetailsList) {
-        // 🚨 중요: 여러 구매가 동시에 들어올 때 순차적으로 처리하여 경쟁 상태 방지
-        Future.forEach<PurchaseDetails>(purchaseDetailsList, (details) async {
-          await _handlePurchaseUpdate(details);
-        });
+        for (final details in purchaseDetailsList) {
+          _handlePurchaseUpdate(details);
+        }
       },
       onError: (error) {
         PurchaseLogger.error('Purchase stream error: $error');
       },
-      onDone: () {
-        PurchaseLogger.info('Purchase stream closed. Restarting...');
-        // 스트림이 닫히면 자동으로 재시작
-        _startContinuousPurchaseListener();
-      },
     );
-    PurchaseLogger.info('🎧 Single unified purchase listener started.');
+    PurchaseLogger.info('🎧 Purchase listener started');
   }
 
-  /// 🔄 모든 구매 업데이트를 처리하는 단일 핸들러 (개선됨)
+  /// 🔄 구매 업데이트 처리 (restored 구매 개선)
   Future<void> _handlePurchaseUpdate(PurchaseDetails details) async {
     final purchaseId = details.purchaseID;
-    if (purchaseId == null) return;
+    if (purchaseId == null) {
+      PurchaseLogger.warning('Purchase ID is null, skipping: ${details.productID}');
+      return;
+    }
 
-    // 🚨 개선: 재시도 로직으로 처리 상태 확인
+    if (kDebugMode) {
+      PurchaseLogger.info('🔄 Processing purchase: $purchaseId (${details.status})');
+    }
+
+    // 🎯 Restored 구매 특별 처리 (중복 방지 강화)
+    if (details.status == PurchaseStatus.restored) {
+      if (kDebugMode) {
+        PurchaseLogger.info('🔄 Restored purchase detected: $purchaseId');
+      }
+      
+      // Restored 구매는 이미 처리된 경우 즉시 스킵
+      if (_successfullyProcessed.contains(purchaseId)) {
+        if (kDebugMode) {
+          PurchaseLogger.info('⏭️ Restored purchase already processed, skipping: $purchaseId');
+        }
+        // 구매 완료 처리만 하고 서버 동기화는 스킵
+        if (details.pendingCompletePurchase) {
+          await _completePurchase(details);
+        }
+        return;
+      }
+    }
+
+    // 🚨 일반 중복 처리 방지
     if (!_shouldProcessPurchase(purchaseId)) {
-      PurchaseLogger.info('Skipping purchase $purchaseId (max retries exceeded or recently processed)');
       return;
     }
 
     // 처리 시도 기록
     _processingAttempts[purchaseId] = (_processingAttempts[purchaseId] ?? 0) + 1;
     _lastProcessTime[purchaseId] = DateTime.now();
-    
-    final activePurchaseCompleter = _activePurchases[details.productID];
-    final isDirectPurchase = activePurchaseCompleter != null;
 
     try {
       switch (details.status) {
         case PurchaseStatus.purchased:
         case PurchaseStatus.restored:
-          final success = await _processSuccessfulPurchase(details, showSnackbar: isDirectPurchase);
-          if (success && isDirectPurchase && !activePurchaseCompleter.isCompleted) {
-            activePurchaseCompleter.complete(true);
-          } else if (!success && isDirectPurchase && !activePurchaseCompleter.isCompleted) {
-            activePurchaseCompleter.complete(false);
-          }
+          await _processSuccessfulPurchase(details);
           break;
         case PurchaseStatus.error:
           PurchaseLogger.error('Purchase error: ${details.error?.message}');
-          if (isDirectPurchase && !activePurchaseCompleter.isCompleted) {
-            activePurchaseCompleter.complete(false);
-          }
           break;
         case PurchaseStatus.canceled:
-          PurchaseLogger.info('Purchase canceled by user.');
-          if (isDirectPurchase && !activePurchaseCompleter.isCompleted) {
-            activePurchaseCompleter.complete(false);
-          }
+          PurchaseLogger.info('Purchase canceled by user');
           break;
         case PurchaseStatus.pending:
-          PurchaseLogger.info('Purchase pending for ${details.productID}.');
+          PurchaseLogger.info('Purchase pending');
           break;
       }
 
+      // 구매 완료 처리
       if (details.pendingCompletePurchase) {
         await _completePurchase(details);
       }
     } catch (e) {
       PurchaseLogger.error('Error processing purchase $purchaseId: $e');
-      // 에러 발생 시 재시도를 위해 시도 횟수 감소
+      // 에러 시 재시도를 위해 시도 횟수 감소
       _processingAttempts[purchaseId] = (_processingAttempts[purchaseId] ?? 1) - 1;
-      
-      // 활성 구매가 있다면 실패로 처리
-      if (isDirectPurchase && !activePurchaseCompleter.isCompleted) {
-        activePurchaseCompleter.complete(false);
-      }
     }
   }
 
-  /// 🔍 구매 처리 여부 판단 (개선됨)
-  bool _shouldProcessPurchase(String purchaseId) {
-    final attempts = _processingAttempts[purchaseId] ?? 0;
-    final lastProcessed = _lastProcessTime[purchaseId];
+  /// 🎉 구매 성공 처리 (단순화됨)
+  Future<void> _processSuccessfulPurchase(PurchaseDetails details) async {
+    PurchaseLogger.info('Processing successful purchase: ${details.productID}');
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      PurchaseLogger.error('User not authenticated');
+      return;
+    }
+
+    final jwsRepresentation = _extractJWSRepresentation(details);
+    if (jwsRepresentation == null) {
+      PurchaseLogger.error('Failed to extract JWS');
+      return;
+    }
+
+    // 🚨 JWS 중복 처리 방지
+    final jwsHash = jwsRepresentation.hashCode.toString();
+    if (_processedJWS.containsKey(jwsHash)) {
+      PurchaseLogger.info('JWS already processed: $jwsHash');
+      return;
+    }
+
+    // 서버 동기화
+    final serverResponse = await _syncPurchaseInfo(user.uid, jwsRepresentation);
+    if (serverResponse == null) {
+      PurchaseLogger.error('Server sync failed');
+      return;
+    }
+
+    // 🎯 성공 처리를 PurchaseSuccessHandler에 위임
+    final result = await _successHandler.handleSuccess(details, serverResponse);
     
-    // 최대 재시도 횟수 초과 시 건너뛰기
-    if (attempts >= maxRetryAttempts) {
+    if (result.success) {
+      // JWS 처리 기록
+      if (details.purchaseID != null) {
+        _processedJWS[jwsHash] = details.purchaseID!;
+        _successfullyProcessed.add(details.purchaseID!);
+      }
+      
+      // 처리 기록 정리
+      _processingAttempts.remove(details.purchaseID);
+      _lastProcessTime.remove(details.purchaseID);
+      
+      // 🎯 Restored 구매의 경우 추가 로깅
+      if (details.status == PurchaseStatus.restored) {
+        PurchaseLogger.info('Restored purchase processed successfully: ${details.productID} (${details.purchaseID})');
+      } else {
+        PurchaseLogger.info('Purchase processed successfully: ${details.productID}');
+      }
+    } else {
+      PurchaseLogger.error('Purchase success handling failed: ${result.errorMessage}');
+    }
+  }
+  
+
+
+  /// 🧹 처리 기록 초기화
+  void _clearProcessingRecords() {
+    _processingAttempts.clear();
+    _lastProcessTime.clear();
+    _successfullyProcessed.clear();
+    _processedJWS.clear();
+  }
+
+  /// 🔍 구매 처리 여부 판단
+  bool _shouldProcessPurchase(String purchaseId) {
+    // 🚨 1. 이미 성공적으로 처리된 거래는 완전 차단
+    if (_successfullyProcessed.contains(purchaseId)) {
+      PurchaseLogger.info('Skipping already successfully processed purchase: $purchaseId');
       return false;
     }
     
-    // 최근에 처리했다면 일정 시간 후에 재시도
+    final attempts = _processingAttempts[purchaseId] ?? 0;
+    final lastProcessed = _lastProcessTime[purchaseId];
+    
+    // 🚨 2. 최대 재시도 횟수 초과 시 건너뛰기
+    if (attempts >= maxRetryAttempts) {
+      PurchaseLogger.warning('Purchase $purchaseId exceeded max retry attempts: $attempts');
+      return false;
+    }
+    
+    // 🚨 3. 최근에 처리했다면 일정 시간 후에 재시도
     if (lastProcessed != null && 
         DateTime.now().difference(lastProcessed) < retryInterval) {
+      final remainingTime = retryInterval - DateTime.now().difference(lastProcessed);
+      PurchaseLogger.info('Purchase $purchaseId still in cooldown. Remaining: ${remainingTime.inMinutes}m ${remainingTime.inSeconds % 60}s');
       return false;
     }
     
     return true;
   }
 
-  /// 🎉 구매 성공 처리를 위한 통합 메서드 (개선됨)
-  Future<bool> _processSuccessfulPurchase(PurchaseDetails details, {required bool showSnackbar}) async {
-    PurchaseLogger.info(
-        'Processing successful purchase: ${details.productID}, Show Snackbar: $showSnackbar');
-
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      PurchaseLogger.error('User not authenticated for purchase processing.');
-      return false;
-    }
-
-    final jwsRepresentation = _extractJWSRepresentation(details);
-    if (jwsRepresentation == null) {
-      PurchaseLogger.error('Failed to extract JWS for purchase.');
-      return false;
-    }
-
-    final serverResponse = await _syncPurchaseInfo(user.uid, jwsRepresentation);
-
-    if (serverResponse != null) {
-      PurchaseLogger.info('서버 동기화 성공. 응답 데이터로 상태 업데이트 중...');
-      if (kDebugMode) {
-        PurchaseLogger.info('서버 응답: $serverResponse');
-      }
-      
-      // 🎯 중요: 서버 응답 후 즉시 상태 업데이트 (한 번만!)
-      UnifiedSubscriptionManager().updateStateWithServerResponse(serverResponse);
-      
-      if (showSnackbar) {
-        _showSuccessSnackBar(details);
-      }
-      await _scheduleNotifications(details);
-      
-      // 성공 시 처리 기록 정리
-      _processingAttempts.remove(details.purchaseID);
-      _lastProcessTime.remove(details.purchaseID);
-      
-      return true;
-    } else {
-      PurchaseLogger.error('서버 동기화 실패 - 응답이 null입니다.');
-      if (showSnackbar) {
-        _showErrorSnackBar('구매 확인 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
-      }
-      return false;
-    }
-  }
-  
-  /// 📱 성공 스낵바 표시 (중앙화된 메시지 사용)
-  void _showSuccessSnackBar(PurchaseDetails details) {
-    final scaffoldMessenger = _scaffoldMessengerKey?.currentState;
-    if (scaffoldMessenger == null) return;
-
-    // 🎯 중앙화된 상수에서 메시지 가져오기
-    final message = SubscriptionConstants.getPurchaseSuccessMessage(details.productID);
-    
-    scaffoldMessenger.showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.green,
-        duration: const Duration(seconds: 3),
-      ),
-    );
-  }
-
-  /// 📱 에러 스낵바 표시
-  void _showErrorSnackBar(String message) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _scaffoldMessengerKey?.currentState?.showSnackBar(
-        SnackBar(
-          content: Text(message),
-          backgroundColor: Colors.red,
-          duration: const Duration(seconds: 3),
-        ),
-      );
-    });
-  }
-
   /// 🔄 서버 동기화
   Future<Map<String, dynamic>?> _syncPurchaseInfo(String userId, String jwsRepresentation) async {
     try {
-      PurchaseLogger.info('Syncing purchase info');
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        PurchaseLogger.error('User not authenticated during sync');
+        return null;
+      }
+      
+      PurchaseLogger.info('Syncing purchase info for user: $userId');
       
       final functions = FirebaseFunctions.instanceFor(region: 'asia-southeast1');
       final result = await functions.httpsCallable('syncPurchaseInfo').call({
         'jwsRepresentation': jwsRepresentation,
         'userId': userId,
+        'userEmail': user.email,
+        'firebaseUid': user.uid,
+        'timestamp': DateTime.now().millisecondsSinceEpoch,
       });
       
       final success = result.data['success'] as bool? ?? false;
       if (success) {
-        PurchaseLogger.info('Purchase sync successful');
-        // 성공 시 전체 응답 데이터 반환
+        PurchaseLogger.info('Purchase sync successful for user: $userId');
         return result.data as Map<String, dynamic>;
       } else {
-        PurchaseLogger.error('Purchase sync failed: ${result.data['error']}');
+        PurchaseLogger.error('Purchase sync failed for user $userId: ${result.data['error']}');
         return null;
       }
     } catch (e) {
       PurchaseErrorHandler.handleSyncError(e, userId, jwsRepresentation.length);
       return null;
-    }
-  }
-
-  /// 🔄 UI 업데이트 -> 이제 UnifiedSubscriptionManager가 담당하므로 제거
-  // Future<void> _updateUIAfterPurchase(String productId) async { ... }
-
-  /// 🔔 알림 스케줄링
-  Future<void> _scheduleNotifications(PurchaseDetails details) async {
-    if (details.productID != premiumMonthlyId) return;
-
-    // Use transaction ID for idempotent check
-    final transactionId = details.purchaseID;
-    if (transactionId == null || transactionId.isEmpty) {
-      PurchaseLogger.warning('Cannot schedule notifications without a purchase ID.');
-      return;
-    }
-    
-    if (_state.scheduledNotifications.contains(transactionId)) {
-        PurchaseLogger.info('Notifications already scheduled for transaction: $transactionId');
-        return;
-      }
-      
-    try {
-      await _notificationService.scheduleTrialEndNotifications(DateTime.now());
-      
-      _state = _state.copyWith(
-        scheduledNotifications: {..._state.scheduledNotifications, transactionId},
-        );
-        
-      PurchaseLogger.info('Notifications scheduled');
-      } catch (e) {
-      PurchaseLogger.error('Failed to schedule notifications: $e');
     }
   }
 
@@ -501,31 +598,20 @@ class InAppPurchaseService {
     }
   }
 
-  /// 🎯 설정 메서드들
-  void setScaffoldMessengerKey(GlobalKey<ScaffoldMessengerState> key) {
-    _scaffoldMessengerKey = key;
-  }
 
-  void setOnPurchaseResult(PurchaseResultCallback? callback) {
-    // This callback is no longer used, but keeping it for now as per instructions.
-    // If it's truly unused, it should be removed.
-  }
 
   /// 🧹 정리
   void dispose() {
     PurchaseLogger.info('Disposing InAppPurchase service');
     _purchaseSubscription?.cancel();
     _purchaseSubscription = null;
-    _activePurchases.clear();
-    _processingAttempts.clear();
-    _lastProcessTime.clear();
+    _clearProcessingRecords();
     _state = const PurchaseState();
-    _scaffoldMessengerKey = null;
   }
 
-  /// 🎯 편의 메서드들
-  Future<bool> buyMonthly() => buyProduct(premiumMonthlyId);
-  Future<bool> buyYearly() => buyProduct(premiumYearlyId);
+  /// 🎯 편의 메서드들 (PurchaseResult 반환으로 변경)
+  Future<PurchaseResult> buyMonthly() => buyProduct(premiumMonthlyId);
+  Future<PurchaseResult> buyYearly() => buyProduct(premiumYearlyId);
 
   /// 🔄 구매 복원
   Future<void> restorePurchases() async {
@@ -539,7 +625,7 @@ class InAppPurchaseService {
     }
   }
 
-  /// 🧹 미완료 거래 정리 (디버그용)
+  /// 🧹 미완료 거래 정리 (Restored 구매 대응 강화)
   Future<void> clearPendingTransactions() async {
     PurchaseLogger.info('Clearing all pending transactions...');
     
@@ -554,10 +640,11 @@ class InAppPurchaseService {
 
       final completer = Completer<void>();
       late StreamSubscription<List<PurchaseDetails>> subscription;
+      int processedCount = 0;
 
-      final timeout = Timer(const Duration(seconds: 5), () {
+      final timeout = Timer(const Duration(seconds: 10), () {
         if (!completer.isCompleted) {
-          PurchaseLogger.warning('Clearing pending transactions timed out after 5 seconds.');
+          PurchaseLogger.warning('Clearing pending transactions timed out after 10 seconds.');
           subscription.cancel();
           completer.complete();
         }
@@ -577,12 +664,19 @@ class InAppPurchaseService {
 
           PurchaseLogger.info('Found ${detailsList.length} pending transactions. Clearing...');
           for (final details in detailsList) {
+            // 🎯 Restored 구매는 즉시 성공 처리 기록에 추가하여 중복 방지
+            if (details.status == PurchaseStatus.restored && details.purchaseID != null) {
+              _successfullyProcessed.add(details.purchaseID!);
+              PurchaseLogger.info('Pre-marked restored purchase as processed: ${details.purchaseID}');
+            }
+            
             await _completePurchase(details);
+            processedCount++;
           }
           
           if (!completer.isCompleted) {
-            PurchaseLogger.info('Finished clearing batch of transactions.');
-            timeout.cancel(); // Reset timer after processing a batch
+            PurchaseLogger.info('Finished clearing batch of $processedCount transactions.');
+            timeout.cancel();
             subscription.cancel();
             completer.complete();
           }
@@ -606,8 +700,8 @@ class InAppPurchaseService {
 
       return completer.future;
 
-      } catch (e) {
+    } catch (e) {
       PurchaseLogger.error('Exception during transaction cleanup: $e');
-      }
+    }
   }
 } 

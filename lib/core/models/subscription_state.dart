@@ -44,13 +44,27 @@ class SubscriptionInfo {
 
   /// 🎯 SubscriptionState로부터 SubscriptionInfo를 생성하는 팩토리 생성자
   factory SubscriptionInfo.fromSubscriptionState(SubscriptionState state) {
+    if (kDebugMode) {
+      debugPrint('🔄 [SubscriptionInfo] SubscriptionState 변환:');
+      debugPrint('   - state.plan.id: ${state.plan.id}');
+      debugPrint('   - state.plan.name: ${state.plan.name}');
+      debugPrint('   - state.plan.isPremium: ${state.plan.isPremium}');
+      debugPrint('   - state.status: ${state.status.name}');
+    }
+    
     Entitlement entitlement;
     if (state.plan.isPremium) {
       // 'trial' 상태를 구분할 방법이 현재 Plan 모델에 없으므로,
       // 프리미엄이면 'premium'으로 간주합니다.
       entitlement = Entitlement.premium;
+      if (kDebugMode) {
+        debugPrint('   - 🎯 프리미엄 entitlement 설정');
+      }
     } else {
       entitlement = Entitlement.free;
+      if (kDebugMode) {
+        debugPrint('   - ❌ 무료 entitlement 설정 (plan.isPremium = false)');
+      }
     }
 
     // PlanStatus를 레거시 SubscriptionStatus로 매핑
@@ -213,26 +227,43 @@ class SubscriptionState extends Equatable {
       final entitlement = data['entitlement'] as String?;
       final subscriptionStatus = data['subscriptionStatus']; // int 또는 string 가능
       
+      // entitlement 기반으로 Plan 결정 (대소문자 무관)
+      final entitlementLower = entitlement?.toLowerCase();
+      
       if (kDebugMode) {
         debugPrint('🔍 [SubscriptionState] Firestore 데이터 파싱:');
-        debugPrint('   - productId: $productId');
-        debugPrint('   - entitlement: $entitlement');
-        debugPrint('   - subscriptionStatus: $subscriptionStatus');
+        debugPrint('   - 전체 데이터: $data');
+        debugPrint('   - productId: $productId (타입: ${productId.runtimeType})');
+        debugPrint('   - entitlement: $entitlement (타입: ${entitlement.runtimeType})');
+        debugPrint('   - entitlementLower: $entitlementLower');
+        debugPrint('   - subscriptionStatus: $subscriptionStatus (타입: ${subscriptionStatus.runtimeType})');
       }
 
-      // entitlement 기반으로 Plan 결정
       Plan plan;
-      if (entitlement == 'premium' && productId != null) {
+      if ((entitlementLower == 'premium' || entitlementLower == 'trial') && productId != null) {
         plan = Plan.fromId(productId);
+        if (kDebugMode) {
+          debugPrint('   - 🎯 프리미엄/트라이얼 조건 충족:');
+          debugPrint('     - entitlementLower: $entitlementLower');
+          debugPrint('     - productId: "$productId"');
+          debugPrint('     - Plan.fromId 결과: ${plan.id} (isPremium: ${plan.isPremium})');
+        }
       } else {
         plan = Plan.free();
+        if (kDebugMode) {
+          debugPrint('   - ❌ 무료 플랜으로 폴백:');
+          debugPrint('     - entitlement: "$entitlement"');
+          debugPrint('     - entitlementLower: "$entitlementLower"');
+          debugPrint('     - productId: "$productId"');
+          debugPrint('     - 조건 실패: premium=${entitlementLower == 'premium'}, trial=${entitlementLower == 'trial'}, hasProductId=${productId != null}');
+        }
       }
 
       // subscriptionStatus 파싱 (int 또는 string)
       PlanStatus status;
       
-      // 🎯 무료 플랜일 때는 항상 active 상태
-      if (entitlement == 'FREE' || entitlement == 'free') {
+      // 🎯 무료 플랜일 때는 항상 active 상태 (대소문자 무관)
+      if (entitlementLower == 'free') {
         status = PlanStatus.active;
         if (kDebugMode) {
           debugPrint('   - 무료 플랜이므로 강제로 active 상태 설정');
@@ -297,8 +328,9 @@ class SubscriptionState extends Equatable {
         debugPrint('   - entitlement: $entitlement');
       }
 
-      // entitlement가 'PREMIUM' 또는 'TRIAL'이면 planId를 기반으로 Plan 생성, 아니면 free Plan
-      final plan = (entitlement == 'PREMIUM' || entitlement == 'TRIAL') && planId != null
+      // entitlement가 'PREMIUM' 또는 'TRIAL'이면 planId를 기반으로 Plan 생성, 아니면 free Plan (대소문자 무관)
+      final entitlementUpper = entitlement?.toUpperCase();
+      final plan = (entitlementUpper == 'PREMIUM' || entitlementUpper == 'TRIAL') && planId != null
           ? Plan.fromId(planId)
           : Plan.free();
 

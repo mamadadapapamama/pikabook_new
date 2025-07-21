@@ -95,8 +95,24 @@ class UnifiedSubscriptionManager {
         _clearAllUserCache();
         _cachedUserId = user.uid;
 
-        // InAppPurchaseService 초기화 (구매 가능 상태 확인)
-        await InAppPurchaseService().initialize();
+        // 🚨 InAppPurchaseService 초기화 (한 번만!)
+        try {
+          final purchaseService = InAppPurchaseService();
+          if (!purchaseService.isInitialized) {
+            await purchaseService.initialize();
+            if (kDebugMode) {
+              debugPrint('✅ [UnifiedSubscriptionManager] InAppPurchaseService 초기화 완료');
+            }
+          } else {
+            if (kDebugMode) {
+              debugPrint('⏭️ [UnifiedSubscriptionManager] InAppPurchaseService 이미 초기화됨');
+            }
+          }
+        } catch (e) {
+          if (kDebugMode) {
+            debugPrint('❌ [UnifiedSubscriptionManager] InAppPurchaseService 초기화 실패: $e');
+          }
+        }
 
         _setupFirestoreListener(user.uid);
         getSubscriptionState(forceRefresh: true);
@@ -172,19 +188,35 @@ class UnifiedSubscriptionManager {
         }
       }
       
-      // 🎯 PREMIUM entitlement 우선 처리
+      // 🚨 개선: PREMIUM → FREE 전환 시 더 엄격한 검증
       final entitlement = serverData['entitlement'] as String?;
+      final subscriptionStatus = serverData['subscriptionStatus'];
+      
       if (_currentState != null && entitlement == 'FREE') {
-        // 현재 상태가 프리미엄이고 새 응답이 FREE라면 timestamp 차이 확인
+        // 현재 상태가 프리미엄이고 새 응답이 FREE라면
         if (_currentState!.isPremiumOrTrial) {
           final timeDiff = newState.timestamp != null && _currentState!.timestamp != null 
               ? newState.timestamp!.difference(_currentState!.timestamp!).inSeconds.abs()
               : 0;
           
-          // 5초 이내의 응답이면 PREMIUM을 우선
-          if (timeDiff <= 5) {
+          // 🚨 조건 강화: 30초 이내의 FREE 응답은 무시
+          if (timeDiff <= 30) {
             if (kDebugMode) {
-              debugPrint('⏭️ [UnifiedSubscriptionManager] FREE 응답 무시 - 현재 PREMIUM 상태 유지 (${timeDiff}초 차이)');
+              debugPrint('⏭️ [UnifiedSubscriptionManager] 의심스러운 FREE 응답 무시:');
+              debugPrint('   - 현재 상태: PREMIUM (${_currentState!.plan.name})');
+              debugPrint('   - 새 응답: FREE (${timeDiff}초 차이)');
+              debugPrint('   - subscriptionStatus: $subscriptionStatus');
+              debugPrint('   - 서버 응답 전체: $serverData');
+            }
+            return;
+          }
+          
+          // 🚨 추가 검증: subscriptionStatus가 활성(1)이면서 FREE인 경우 무시
+          if (subscriptionStatus == 1) {
+            if (kDebugMode) {
+              debugPrint('⏭️ [UnifiedSubscriptionManager] 활성 상태인데 FREE 응답 - 데이터 불일치로 무시');
+              debugPrint('   - subscriptionStatus: $subscriptionStatus (ACTIVE)');
+              debugPrint('   - entitlement: $entitlement');
             }
             return;
           }
@@ -224,6 +256,14 @@ class UnifiedSubscriptionManager {
   /// 🔥 Firestore 스냅샷 직접 처리 (개선됨)
   void _handleFirestoreSnapshot(DocumentSnapshot snapshot) {
     try {
+      if (kDebugMode) {
+        debugPrint('🔥 [UnifiedSubscriptionManager] Firestore 스냅샷 수신:');
+        debugPrint('   - 문서 ID: ${snapshot.id}');
+        debugPrint('   - 문서 존재: ${snapshot.exists}');
+        debugPrint('   - 메타데이터: ${snapshot.metadata}');
+        debugPrint('   - 서버에서 온 데이터: ${snapshot.metadata.isFromCache ? "NO (캐시)" : "YES (서버)"}');
+      }
+      
       if (snapshot.exists && snapshot.data() != null) {
         final userData = snapshot.data()! as Map<String, dynamic>;
         // 🎯 수정: subscriptionData 필드에서 데이터 추출
@@ -240,9 +280,18 @@ class UnifiedSubscriptionManager {
 
         if (kDebugMode) {
           debugPrint('✅ [UnifiedSubscriptionManager] Firestore 스냅샷 처리');
-          debugPrint('   - entitlement: ${subscriptionData['entitlement']}');
-          debugPrint('   - subscriptionStatus: ${subscriptionData['subscriptionStatus']}');
-          debugPrint('   - productId: ${subscriptionData['productId']}');
+          debugPrint('   - 🚨 CRITICAL: 이 데이터가 클라이언트에서 업데이트된 것인지 확인 필요!');
+          debugPrint('   - 전체 subscriptionData: $subscriptionData');
+          debugPrint('   - entitlement: ${subscriptionData['entitlement']} (타입: ${subscriptionData['entitlement'].runtimeType})');
+          debugPrint('   - subscriptionStatus: ${subscriptionData['subscriptionStatus']} (타입: ${subscriptionData['subscriptionStatus'].runtimeType})');
+          debugPrint('   - productId: ${subscriptionData['productId']} (타입: ${subscriptionData['productId'].runtimeType})');
+          
+          // 🚨 FREE entitlement 감지 시 특별 로그
+          if (subscriptionData['entitlement'] == 'FREE') {
+            debugPrint('🚨🚨🚨 [CRITICAL] FREE entitlement 감지!');
+            debugPrint('   - 이것이 클라이언트에서 직접 업데이트한 것인지 확인 필요');
+            debugPrint('   - Stack trace: ${StackTrace.current}');
+          }
         }
 
         final newState = SubscriptionState.fromFirestore(subscriptionData);
@@ -267,6 +316,7 @@ class UnifiedSubscriptionManager {
     } catch (e) {
       if (kDebugMode) {
         debugPrint('❌ [UnifiedSubscriptionManager] Firestore 스냅샷 처리 중 오류: $e');
+        debugPrint('   - Stack trace: ${StackTrace.current}');
       }
     }
   }

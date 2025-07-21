@@ -118,5 +118,9 @@
 	<false/>
 	<key>io.flutter.embedded_views_preview</key>
 	<true/>
+	<key>UIKeyboardIsOptionalForTextInput</key>
+	<true/>
+	<key>UIKeyboardAppearance</key>
+	<string>UIKeyboardAppearanceDefault</string>
 </dict>
 </plist>
