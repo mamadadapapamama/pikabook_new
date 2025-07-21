@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
@@ -226,9 +227,13 @@ class InAppPurchaseService {
   final Map<String, DateTime> _lastProcessTime = {};
   final Set<String> _successfullyProcessed = {};
   final Map<String, String> _processedJWS = {}; // JWS 해시 -> 거래 ID
+  final Set<String> _syncedTransactionIds = {}; // 서버 동기화 완료된 거래 ID
+  final Set<String> _processedOriginalTransactionIds = {}; // 복원된 구매의 originalTransactionId 추적
+  final Map<String, Timer> _debounceTimers = {}; // Debounce 타이머
   
   static const int maxRetryAttempts = 3;
   static const Duration retryInterval = Duration(minutes: 5);
+  static const Duration debounceDelay = Duration(seconds: 2); // Debounce 지연
   
   // 🎯 상품 ID
   static const String premiumMonthlyId = 'premium_monthly';
@@ -350,8 +355,52 @@ class InAppPurchaseService {
   /// 🎧 구매 스트림 리스너 (단순화됨)
   void _startPurchaseListener() {
     _purchaseSubscription = _inAppPurchase.purchaseStream.listen(
-      (purchaseDetailsList) {
+      (purchaseDetailsList) async {
+        if (purchaseDetailsList.isEmpty) return;
+        
+        PurchaseLogger.info('Received ${purchaseDetailsList.length} purchase details');
+        
         for (final details in purchaseDetailsList) {
+          final purchaseId = details.purchaseID;
+          
+          // 🚨 Restored 구매는 originalTransactionId로 중복 체크
+          if (details.status == PurchaseStatus.restored) {
+            final originalTransactionId = _extractOriginalTransactionId(details);
+            
+            if (kDebugMode) {
+              PurchaseLogger.info('🔍 Restored purchase debug:');
+              PurchaseLogger.info('   - purchaseId: $purchaseId');
+              PurchaseLogger.info('   - originalTransactionId: $originalTransactionId');
+              PurchaseLogger.info('   - processedOriginalTransactionIds: $_processedOriginalTransactionIds');
+            }
+            
+            if (originalTransactionId != null && _processedOriginalTransactionIds.contains(originalTransactionId)) {
+              PurchaseLogger.info('✅ Restored purchase with originalTransactionId already processed, skipping: $originalTransactionId');
+              
+              // 완료 처리만 수행
+              if (details.pendingCompletePurchase) {
+                await _inAppPurchase.completePurchase(details);
+                PurchaseLogger.info('Completed already processed restored purchase: $purchaseId');
+              }
+              continue; // 이미 처리된 것만 스킵
+            }
+            
+            // 새로운 복원된 구매는 서버 동기화 필요 (유효한 구독일 수 있음)
+            if (originalTransactionId != null) {
+              _processedOriginalTransactionIds.add(originalTransactionId);
+              PurchaseLogger.info('🆕 Processing new restored purchase with originalTransactionId: $originalTransactionId');
+            } else {
+              PurchaseLogger.warning('⚠️ Could not extract originalTransactionId for restored purchase: $purchaseId');
+            }
+          }
+          
+          // 🚨 스트림 레벨에서 중복 체크
+          if (purchaseId != null && 
+              (_successfullyProcessed.contains(purchaseId) || _syncedTransactionIds.contains(purchaseId))) {
+            PurchaseLogger.info('Purchase already processed at stream level, skipping: $purchaseId');
+            continue;
+          }
+          
           _handlePurchaseUpdate(details);
         }
       },
@@ -362,7 +411,7 @@ class InAppPurchaseService {
     PurchaseLogger.info('🎧 Purchase listener started');
   }
 
-  /// 🔄 구매 업데이트 처리 (restored 구매 개선)
+  /// 🔄 구매 업데이트 처리 (debounce 및 중복 방지 강화)
   Future<void> _handlePurchaseUpdate(PurchaseDetails details) async {
     final purchaseId = details.purchaseID;
     if (purchaseId == null) {
@@ -370,26 +419,91 @@ class InAppPurchaseService {
       return;
     }
 
-    if (kDebugMode) {
-      PurchaseLogger.info('🔄 Processing purchase: $purchaseId (${details.status})');
-    }
-
-    // 🎯 Restored 구매 특별 처리 (중복 방지 강화)
+    // 🚨 Restored 구매는 스트림에서 이미 처리됨 (여기서는 확인만)
     if (details.status == PurchaseStatus.restored) {
-      if (kDebugMode) {
-        PurchaseLogger.info('🔄 Restored purchase detected: $purchaseId');
-      }
+      final originalTransactionId = _extractOriginalTransactionId(details);
       
-      // Restored 구매는 이미 처리된 경우 즉시 스킵
-      if (_successfullyProcessed.contains(purchaseId)) {
+      if (originalTransactionId != null && _processedOriginalTransactionIds.contains(originalTransactionId)) {
         if (kDebugMode) {
-          PurchaseLogger.info('⏭️ Restored purchase already processed, skipping: $purchaseId');
+          PurchaseLogger.info('🔄 Restored purchase already processed in handleUpdate, skipping: $originalTransactionId');
         }
-        // 구매 완료 처리만 하고 서버 동기화는 스킵
+        
+        // 완료 처리만 수행
         if (details.pendingCompletePurchase) {
           await _completePurchase(details);
         }
         return;
+      } else {
+        // 스트림에서 놓친 경우에만 여기서 처리
+        if (kDebugMode) {
+          PurchaseLogger.warning('⚠️ Restored purchase not processed in stream, processing in handleUpdate: $originalTransactionId');
+        }
+      }
+    }
+
+    if (kDebugMode) {
+      PurchaseLogger.info('🔄 Purchase update received:');
+      PurchaseLogger.info('   - Product: ${details.productID}');
+      PurchaseLogger.info('   - Purchase ID: $purchaseId');
+      PurchaseLogger.info('   - Status: ${details.status}');
+      PurchaseLogger.info('   - Current attempts: ${_processingAttempts[purchaseId] ?? 0}');
+    }
+
+    // 🎯 Debounce 처리 (같은 거래 ID의 연속적인 호출 방지)
+    if (_debounceTimers.containsKey(purchaseId)) {
+      _debounceTimers[purchaseId]?.cancel();
+    }
+    
+    _debounceTimers[purchaseId] = Timer(debounceDelay, () async {
+      await _processDebounced(details);
+      _debounceTimers.remove(purchaseId);
+    });
+    
+    // 즉시 completePurchase 처리 (debounce와 별개로)
+    if (details.pendingCompletePurchase) {
+      await _completePurchase(details);
+    }
+  }
+
+  /// 🎯 Debounce된 구매 처리
+  Future<void> _processDebounced(PurchaseDetails details) async {
+    final purchaseId = details.purchaseID!;
+    
+    if (kDebugMode) {
+      PurchaseLogger.info('📝 Processing purchase attempt ${_processingAttempts[purchaseId] ?? 0 + 1} for $purchaseId');
+    }
+
+    // 🚨 최우선: 이미 처리된 거래는 즉시 스킵 (Restored 구매 포함)
+    if (_successfullyProcessed.contains(purchaseId) || _syncedTransactionIds.contains(purchaseId)) {
+      if (kDebugMode) {
+        PurchaseLogger.info('⏭️ Purchase already processed, skipping: $purchaseId');
+      }
+      return;
+    }
+
+    // 🚨 Restored 구매는 originalTransactionId로 중복 체크
+    if (details.status == PurchaseStatus.restored) {
+      final originalTransactionId = _extractOriginalTransactionId(details);
+      
+      if (originalTransactionId != null && _processedOriginalTransactionIds.contains(originalTransactionId)) {
+        if (kDebugMode) {
+          PurchaseLogger.info('🔄 Restored purchase with originalTransactionId already processed, skipping: $originalTransactionId');
+        }
+        
+        // 완료 처리만 하고 서버 동기화는 스킵
+        if (details.pendingCompletePurchase) {
+          await _completePurchase(details);
+        }
+        
+        return; // 완전히 스킵
+      }
+      
+      // 새로운 복원된 구매는 처리하되 originalTransactionId 기록
+      if (originalTransactionId != null) {
+        _processedOriginalTransactionIds.add(originalTransactionId);
+        if (kDebugMode) {
+          PurchaseLogger.info('🔄 Processing new restored purchase with originalTransactionId: $originalTransactionId');
+        }
       }
     }
 
@@ -418,11 +532,6 @@ class InAppPurchaseService {
           PurchaseLogger.info('Purchase pending');
           break;
       }
-
-      // 구매 완료 처리
-      if (details.pendingCompletePurchase) {
-        await _completePurchase(details);
-      }
     } catch (e) {
       PurchaseLogger.error('Error processing purchase $purchaseId: $e');
       // 에러 시 재시도를 위해 시도 횟수 감소
@@ -430,9 +539,12 @@ class InAppPurchaseService {
     }
   }
 
-  /// 🎉 구매 성공 처리 (단순화됨)
+  /// 🎉 구매 성공 처리 (서버 동기화 중복 방지 강화)
   Future<void> _processSuccessfulPurchase(PurchaseDetails details) async {
-    PurchaseLogger.info('Processing successful purchase: ${details.productID}');
+    final purchaseId = details.purchaseID;
+    final showSnackbar = details.status != PurchaseStatus.restored;
+    
+    PurchaseLogger.info('Processing successful purchase: ${details.productID}, Show Snackbar: $showSnackbar');
 
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
@@ -440,9 +552,16 @@ class InAppPurchaseService {
       return;
     }
 
+    // 🚨 이중 체크: 이미 처리된 거래는 완전 차단
+    if (purchaseId != null && 
+        (_syncedTransactionIds.contains(purchaseId) || _successfullyProcessed.contains(purchaseId))) {
+      PurchaseLogger.info('Transaction already processed, skipping: $purchaseId');
+      return;
+    }
+
     final jwsRepresentation = _extractJWSRepresentation(details);
     if (jwsRepresentation == null) {
-      PurchaseLogger.error('Failed to extract JWS');
+      _logJWSExtractionFailure(details);
       return;
     }
 
@@ -453,7 +572,14 @@ class InAppPurchaseService {
       return;
     }
 
+    // 🚨 서버 동기화 전 최종 체크
+    if (purchaseId != null && _syncedTransactionIds.contains(purchaseId)) {
+      PurchaseLogger.info('Transaction synced during processing, skipping: $purchaseId');
+      return;
+    }
+
     // 서버 동기화
+    PurchaseLogger.info('Syncing purchase info for user: ${user.uid}');
     final serverResponse = await _syncPurchaseInfo(user.uid, jwsRepresentation);
     if (serverResponse == null) {
       PurchaseLogger.error('Server sync failed');
@@ -464,19 +590,25 @@ class InAppPurchaseService {
     final result = await _successHandler.handleSuccess(details, serverResponse);
     
     if (result.success) {
-      // JWS 처리 기록
-      if (details.purchaseID != null) {
-        _processedJWS[jwsHash] = details.purchaseID!;
-        _successfullyProcessed.add(details.purchaseID!);
+      // 처리 완료 기록
+      if (purchaseId != null) {
+        _processedJWS[jwsHash] = purchaseId;
+        _successfullyProcessed.add(purchaseId);
+        _syncedTransactionIds.add(purchaseId); // 서버 동기화 완료 기록
       }
       
       // 처리 기록 정리
-      _processingAttempts.remove(details.purchaseID);
-      _lastProcessTime.remove(details.purchaseID);
+      _processingAttempts.remove(purchaseId);
+      _lastProcessTime.remove(purchaseId);
+      
+      // 🎯 구매 성공 시 UI 피드백 (Snackbar) - 전역 키 사용
+      if (showSnackbar && result.successMessage != null) {
+        _showGlobalSnackbar(result.successMessage!);
+      }
       
       // 🎯 Restored 구매의 경우 추가 로깅
       if (details.status == PurchaseStatus.restored) {
-        PurchaseLogger.info('Restored purchase processed successfully: ${details.productID} (${details.purchaseID})');
+        PurchaseLogger.info('Restored purchase processed successfully: ${details.productID} (${purchaseId})');
       } else {
         PurchaseLogger.info('Purchase processed successfully: ${details.productID}');
       }
@@ -484,15 +616,58 @@ class InAppPurchaseService {
       PurchaseLogger.error('Purchase success handling failed: ${result.errorMessage}');
     }
   }
+
+  /// 🔍 JWS 추출 실패 상세 로깅
+  void _logJWSExtractionFailure(PurchaseDetails details) {
+    final reasons = <String>[];
+    
+    try {
+      final verificationData = details.verificationData;
+      if (verificationData.serverVerificationData.isEmpty) {
+        reasons.add('serverVerificationData is empty');
+      }
+      if (verificationData.localVerificationData.isEmpty) {
+        reasons.add('localVerificationData is empty');
+      }
+    } catch (e) {
+      reasons.add('verificationData access failed: $e');
+    }
+    
+    if (details.purchaseID == null || details.purchaseID!.isEmpty) {
+      reasons.add('purchaseID is null or empty');
+    }
+    
+    final reasonText = reasons.isNotEmpty ? reasons.join(', ') : 'unknown reason';
+    PurchaseLogger.error('Failed to extract JWS for ${details.productID}: $reasonText');
+    
+    if (kDebugMode) {
+      PurchaseLogger.error('Purchase details debug:');
+      PurchaseLogger.error('  - Product ID: ${details.productID}');
+      PurchaseLogger.error('  - Purchase ID: ${details.purchaseID}');
+      PurchaseLogger.error('  - Status: ${details.status}');
+      PurchaseLogger.error('  - Pending complete: ${details.pendingCompletePurchase}');
+    }
+  }
   
 
 
-  /// 🧹 처리 기록 초기화
+  /// 🧹 처리 기록 초기화 (앱 시작 시에만)
   void _clearProcessingRecords() {
     _processingAttempts.clear();
     _lastProcessTime.clear();
-    _successfullyProcessed.clear();
+    // 🚨 성공 기록은 앱 세션 동안 유지 (중복 방지를 위해)
+    // _successfullyProcessed.clear(); 
+    // _syncedTransactionIds.clear();
+    // _processedOriginalTransactionIds.clear(); // 복원된 구매 기록도 유지
     _processedJWS.clear();
+    
+    // Debounce 타이머 정리
+    for (final timer in _debounceTimers.values) {
+      timer.cancel();
+    }
+    _debounceTimers.clear();
+    
+    PurchaseLogger.info('Processing records cleared (keeping success and originalTransactionId records)');
   }
 
   /// 🔍 구매 처리 여부 판단
@@ -571,6 +746,70 @@ class InAppPurchaseService {
     }
   }
 
+  /// 🔍 originalTransactionId 추출 (복원된 구매 중복 방지용)
+  String? _extractOriginalTransactionId(PurchaseDetails details) {
+    try {
+      final jwsRepresentation = _extractJWSRepresentation(details);
+      if (jwsRepresentation == null) {
+        if (kDebugMode) {
+          PurchaseLogger.warning('JWS representation is null for ${details.purchaseID}');
+        }
+        return null;
+      }
+      
+      if (kDebugMode) {
+        PurchaseLogger.info('🔍 JWS length: ${jwsRepresentation.length}');
+      }
+      
+      // JWS는 header.payload.signature 형태
+      final parts = jwsRepresentation.split('.');
+      if (parts.length != 3) {
+        if (kDebugMode) {
+          PurchaseLogger.warning('Invalid JWS format: ${parts.length} parts');
+        }
+        return null;
+      }
+      
+      // payload 부분을 Base64 디코딩
+      final payload = parts[1];
+      
+      // Base64 패딩 추가 (필요한 경우)
+      String paddedPayload = payload;
+      while (paddedPayload.length % 4 != 0) {
+        paddedPayload += '=';
+      }
+      
+      final decodedBytes = base64Decode(paddedPayload);
+      final decodedString = utf8.decode(decodedBytes);
+      final jsonData = jsonDecode(decodedString) as Map<String, dynamic>;
+      
+      // originalTransactionId 추출 (camelCase 시도)
+      String? originalTransactionId = jsonData['originalTransactionId'] as String?;
+      
+      // 폴백: snake_case 시도
+      originalTransactionId ??= jsonData['original_transaction_id'] as String?;
+      
+      // 폴백: originalTransactionId가 null이면 transactionId 사용
+      originalTransactionId ??= jsonData['transactionId'] as String?;
+      
+      if (kDebugMode) {
+        PurchaseLogger.info('🔍 Extracted originalTransactionId: $originalTransactionId');
+        if (originalTransactionId == null) {
+          PurchaseLogger.info('🔍 Available keys in JWS payload: ${jsonData.keys.toList()}');
+          PurchaseLogger.info('🔍 transactionId value: ${jsonData['transactionId']}');
+        }
+      }
+      
+      return originalTransactionId;
+      
+    } catch (e) {
+      if (kDebugMode) {
+        PurchaseLogger.error('Failed to extract originalTransactionId: $e');
+      }
+      return null;
+    }
+  }
+
   /// ✅ 구매 완료 처리
   Future<void> _completePurchase(PurchaseDetails details) async {
     try {
@@ -605,7 +844,21 @@ class InAppPurchaseService {
     PurchaseLogger.info('Disposing InAppPurchase service');
     _purchaseSubscription?.cancel();
     _purchaseSubscription = null;
-    _clearProcessingRecords();
+    
+    // Debounce 타이머 정리
+    for (final timer in _debounceTimers.values) {
+      timer.cancel();
+    }
+    
+    // 완전 정리 (dispose 시에는 모든 기록 삭제)
+    _processingAttempts.clear();
+    _lastProcessTime.clear();
+    _successfullyProcessed.clear();
+    _processedJWS.clear();
+    _syncedTransactionIds.clear();
+    _processedOriginalTransactionIds.clear();
+    _debounceTimers.clear();
+    
     _state = const PurchaseState();
   }
 
@@ -641,6 +894,7 @@ class InAppPurchaseService {
       final completer = Completer<void>();
       late StreamSubscription<List<PurchaseDetails>> subscription;
       int processedCount = 0;
+      int skippedCount = 0;
 
       final timeout = Timer(const Duration(seconds: 10), () {
         if (!completer.isCompleted) {
@@ -664,18 +918,35 @@ class InAppPurchaseService {
 
           PurchaseLogger.info('Found ${detailsList.length} pending transactions. Clearing...');
           for (final details in detailsList) {
-            // 🎯 Restored 구매는 즉시 성공 처리 기록에 추가하여 중복 방지
-            if (details.status == PurchaseStatus.restored && details.purchaseID != null) {
-              _successfullyProcessed.add(details.purchaseID!);
-              PurchaseLogger.info('Pre-marked restored purchase as processed: ${details.purchaseID}');
+            final purchaseId = details.purchaseID;
+            
+            // 🚨 이미 처리된 거래는 완료만 하고 처리 기록에 추가하지 않음
+            if (purchaseId != null && 
+                (_successfullyProcessed.contains(purchaseId) || _syncedTransactionIds.contains(purchaseId))) {
+              if (details.pendingCompletePurchase) {
+                await _completePurchase(details);
+                skippedCount++;
+                PurchaseLogger.info('Completed already processed transaction: $purchaseId');
+              }
+              continue;
             }
             
-            await _completePurchase(details);
-            processedCount++;
+            // 🚨 Restored 구매는 완료만 하고 처리 기록에 추가하지 않음
+            if (details.status == PurchaseStatus.restored && purchaseId != null) {
+              PurchaseLogger.info('Restored purchase found during cleanup, completing only: $purchaseId');
+            }
+            
+            // 🔄 모든 pending purchase는 완료 처리 필요
+            if (details.pendingCompletePurchase) {
+              await _completePurchase(details);
+              processedCount++;
+            } else {
+              PurchaseLogger.info('Transaction $purchaseId does not require completion');
+            }
           }
           
           if (!completer.isCompleted) {
-            PurchaseLogger.info('Finished clearing batch of $processedCount transactions.');
+            PurchaseLogger.info('Finished clearing: processed $processedCount, skipped $skippedCount transactions.');
             timeout.cancel();
             subscription.cancel();
             completer.complete();
