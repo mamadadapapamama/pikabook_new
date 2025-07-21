@@ -17,6 +17,7 @@ import '../../../core/models/subscription_state.dart';
 /// - 배너 닫기 처리
 /// - 외부 링크 열기 (문의폼, App Store)
 /// - 배너 위젯 생성
+/// - 구독 상태 변경 시 배너 상태 자동 리셋
 class HomeUICoordinator {
   final UserPreferencesService _userPreferencesService = UserPreferencesService();
 
@@ -27,7 +28,6 @@ class HomeUICoordinator {
     required Function(BannerType) onShowUpgradeModal,
     required Function(BannerType) onDismissBanner,
   }) async {
-
     
     if (kDebugMode) {
       debugPrint('🎨 [HomeUICoordinator] buildActiveBanners 시작:');
@@ -35,12 +35,13 @@ class HomeUICoordinator {
       debugPrint('   - 입력 배너 타입들: ${activeBanners.map((e) => e.name).toList()}');
     }
     
+    // 🎯 구독 상태 변경 시 관련 없는 배너 상태 리셋
+    await _resetIrrelevantBannerStates(activeBanners);
+    
     final banners = <Widget>[];
     
     // 🎯 닫힌 배너 필터링
     final filteredBanners = await _filterDismissedBanners(activeBanners);
-    
-
     
     if (kDebugMode) {
       debugPrint('   - 필터링 후 배너 수: ${filteredBanners.length}');
@@ -63,14 +64,48 @@ class HomeUICoordinator {
       );
     }
     
-
-    
     if (kDebugMode) {
       debugPrint('   - 최종 생성된 배너 위젯 수: ${banners.length}');
       debugPrint('🎨 [HomeUICoordinator] buildActiveBanners 완료');
     }
     
     return banners;
+  }
+
+  /// 🔄 구독 상태 변경 시 관련 없는 배너 상태 리셋
+  Future<void> _resetIrrelevantBannerStates(List<BannerType> activeBanners) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final activeNames = activeBanners.map((e) => e.name).toSet();
+      
+      // 모든 배너 타입 중에서 현재 활성화되지 않은 것들의 닫힌 상태 리셋
+      final allBannerTypes = BannerType.values;
+      final resetCount = <String>[];
+      
+      for (final bannerType in allBannerTypes) {
+        if (!activeNames.contains(bannerType.name)) {
+          final key = 'banner_${bannerType.name}_dismissed';
+          final wasDismissed = prefs.getBool(key) ?? false;
+          
+          if (wasDismissed) {
+            await prefs.remove(key);
+            resetCount.add(bannerType.name);
+            
+            if (kDebugMode) {
+              debugPrint('🔄 [HomeUICoordinator] 배너 상태 리셋: ${bannerType.name}');
+            }
+          }
+        }
+      }
+      
+      if (resetCount.isNotEmpty && kDebugMode) {
+        debugPrint('✅ [HomeUICoordinator] 총 ${resetCount.length}개 배너 상태 리셋: ${resetCount.join(', ')}');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ [HomeUICoordinator] 배너 상태 리셋 실패: $e');
+      }
+    }
   }
 
   /// 🎯 닫힌 배너 필터링
@@ -83,12 +118,9 @@ class HomeUICoordinator {
         final key = 'banner_${bannerType.name}_dismissed';
         final isDismissed = prefs.getBool(key) ?? false;
         
-
-        
         if (!isDismissed) {
           filteredBanners.add(bannerType);
         } else {
-
           if (kDebugMode) {
             debugPrint('🚫 [HomeUICoordinator] 닫힌 배너 필터링: ${bannerType.name}');
           }

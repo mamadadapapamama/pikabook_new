@@ -111,12 +111,26 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       // HomeViewModel 초기화
       _homeViewModel = HomeViewModel(isNewUser: userStatus == '신규');
       
+      // 로딩 상태 해제
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+      
       if (kDebugMode) {
         debugPrint('✅ [HomeScreen] 화면 초기화 완료');
       }
     } catch (e) {
       if (kDebugMode) {
         debugPrint('❌ [HomeScreen] 화면 초기화 실패: $e');
+      }
+      
+      // 에러 발생 시에도 로딩 상태 해제
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
       }
     }
   }
