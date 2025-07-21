@@ -13,7 +13,7 @@ import '../../core/utils/language_constants.dart';
 import '../../core/services/text_processing/text_processing_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/widgets/pika_button.dart';
-import '../../core/widgets/upgrade_modal.dart';
+import '../../core/widgets/simple_upgrade_modal.dart';
 import '../../core/services/common/usage_limit_service.dart';
 import '../../core/widgets/usage_dialog.dart';
 
@@ -195,9 +195,15 @@ class SettingsViewModel extends ChangeNotifier {
 
   /// 업그레이드 모달 표시
   void _showUpgradeModal(BuildContext context) {
-    UpgradeModal.show(
+    // 🎯 구독 상태에 따라 모달 타입 결정
+    final modalType = (_subscriptionInfo?.hasUsedTrial ?? false) 
+        ? UpgradeModalType.premiumOffer 
+        : UpgradeModalType.trialOffer;
+    
+    SimpleUpgradeModal.show(
       context,
-      onUpgrade: () async {
+      type: modalType,
+      onClose: () async {
         await refreshPlanInfo(force: true);
       },
     );

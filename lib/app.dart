@@ -21,7 +21,7 @@ import 'core/services/authentication/auth_service.dart';
 import 'core/services/authentication/user_account_service.dart';
 import 'core/services/subscription/unified_subscription_manager.dart';
 import 'core/models/subscription_state.dart';
-import 'core/widgets/upgrade_modal.dart'; // UpgradeModal 추가
+
 import 'package:cloud_firestore/cloud_firestore.dart'; // FirebaseFirestore 추가
 
 /// 오버스크롤 색상을 지정하는 커스텀 스크롤 비헤이비어

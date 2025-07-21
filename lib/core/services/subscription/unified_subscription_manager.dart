@@ -7,6 +7,7 @@ import '../cache/local_cache_storage.dart';
 import '../../models/subscription_state.dart';
 import '../../models/plan.dart';
 import '../../models/plan_status.dart';
+import '../../constants/subscription_constants.dart';
 import '../payment/in_app_purchase_service.dart';
 
 /// 🎯 구독 상태를 통합적으로 관리하는 서비스 (SubscriptionRepository 역할)
@@ -282,15 +283,34 @@ class UnifiedSubscriptionManager {
           debugPrint('✅ [UnifiedSubscriptionManager] Firestore 스냅샷 처리');
           debugPrint('   - 🚨 CRITICAL: 이 데이터가 클라이언트에서 업데이트된 것인지 확인 필요!');
           debugPrint('   - 전체 subscriptionData: $subscriptionData');
-          debugPrint('   - entitlement: ${subscriptionData['entitlement']} (타입: ${subscriptionData['entitlement'].runtimeType})');
+          debugPrint('   - entitlement: "${subscriptionData['entitlement']}" (타입: ${subscriptionData['entitlement'].runtimeType})');
           debugPrint('   - subscriptionStatus: ${subscriptionData['subscriptionStatus']} (타입: ${subscriptionData['subscriptionStatus'].runtimeType})');
-          debugPrint('   - productId: ${subscriptionData['productId']} (타입: ${subscriptionData['productId'].runtimeType})');
+          debugPrint('   - productId: "${subscriptionData['productId']}" (타입: ${subscriptionData['productId'].runtimeType})');
+          debugPrint('   - hasUsedTrial: ${subscriptionData['hasUsedTrial']}');
+          
+          // 🚨 배너 생성 테스트
+          final testEntitlement = subscriptionData['entitlement'] as String? ?? '';
+          final testStatus = subscriptionData['subscriptionStatus'] ?? 0;
+          int testStatusInt;
+          if (testStatus is int) {
+            testStatusInt = testStatus;
+          } else if (testStatus is String) {
+            testStatusInt = int.tryParse(testStatus) ?? 0;
+          } else {
+            testStatusInt = 0;
+          }
+          
+          debugPrint('   - 🎯 배너 생성 테스트:');
+          debugPrint('     - entitlement: "$testEntitlement"');
+          debugPrint('     - subscriptionStatus (int): $testStatusInt');
+          
+          final testBanner = SubscriptionConstants.getBannerType(testEntitlement, testStatusInt);
+          debugPrint('     - 생성된 배너: ${testBanner ?? "null"}');
           
           // 🚨 FREE entitlement 감지 시 특별 로그
           if (subscriptionData['entitlement'] == 'FREE') {
             debugPrint('🚨🚨🚨 [CRITICAL] FREE entitlement 감지!');
             debugPrint('   - 이것이 클라이언트에서 직접 업데이트한 것인지 확인 필요');
-            debugPrint('   - Stack trace: ${StackTrace.current}');
           }
         }
 

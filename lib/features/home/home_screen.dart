@@ -13,7 +13,7 @@ import '../../core/theme/tokens/ui_tokens.dart';
 import '../../core/widgets/pika_app_bar.dart';
 import '../../core/widgets/dot_loading_indicator.dart';
 import '../../core/models/banner_type.dart';
-import '../../core/widgets/upgrade_modal.dart'; // 🎯 UpgradeModal 추가
+import '../../core/widgets/simple_upgrade_modal.dart'; // 🎯 SimpleUpgradeModal 추가
 
 // 🎯 Feature imports
 import 'home_viewmodel.dart';
@@ -180,7 +180,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       isDismissible: false, // 온보딩 후에는 반드시 선택하도록
-      builder: (context) => UpgradeModal(reason: UpgradeReason.welcomeTrial),
+      builder: (context) => SimpleUpgradeModal(type: UpgradeModalType.trialOffer),
     ).then((result) async {
       if (kDebugMode) {
         debugPrint('✅ [HomeScreen] 환영 모달 완료');
@@ -229,20 +229,20 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   /// 업그레이드 모달 표시
   void _onShowUpgradeModal(BannerType bannerType) {
-    _uiCoordinator.showUpgradeModal(context, bannerType);
+    _uiCoordinator.showUpgradeModal(context, bannerType, subscriptionState: widget.subscriptionState);
   }
 
-  /// 배너 닫기 (즉시 UI 업데이트 + 스트림 기반 새로고침)
+  /// 배너 닫기 (즉시 UI 업데이트)
   void _onDismissBanner(BannerType bannerType) async {
     if (kDebugMode) {
       debugPrint('🚫 [HomeScreen] 배너 닫기 시작: ${bannerType.name}');
     }
     
     try {
-      // 백그라운드에서 배너 상태 저장 -> 이로 인해 스트림이 업데이트되고 App.dart를 통해 HomeScreen에 전달됨
+      // 배너 상태 저장
       await _uiCoordinator.dismissBanner(bannerType);
       
-      // 🎯 배너 닫기 후 즉시 UI 업데이트
+      // 🎯 배너 닫기 후 즉시 UI 업데이트 (FutureBuilder 강제 재빌드)
       if (mounted) {
         setState(() {
           // FutureBuilder가 재실행되어 필터링된 배너 목록을 다시 빌드함
@@ -281,34 +281,63 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           builder: (context, viewModel, _) {
             final hasNotes = viewModel.notes.isNotEmpty;
             
+            // 🚨 FutureBuilder 전에 먼저 로그 출력
+            if (kDebugMode) {
+              debugPrint('🏠 [HomeScreen] 배너 상태 (FutureBuilder 전):');
+              debugPrint('   - 구독 상태: ${widget.subscriptionState.toString()}');
+              debugPrint('   - Plan: ${widget.subscriptionState.plan.id} (isPremium: ${widget.subscriptionState.plan.isPremium})');
+              debugPrint('   - Status: ${widget.subscriptionState.status.name}');
+              debugPrint('   - HasUsedTrial: ${widget.subscriptionState.hasUsedTrial}');
+              debugPrint('   - 🎯 원본 배너 리스트: ${widget.subscriptionState.activeBanners}');
+            }
+
+            final convertedBanners = widget.subscriptionState.activeBanners
+                .map((name) {
+                  try {
+                    final bannerType = BannerType.values.firstWhere((e) => e.name == name);
+                    if (kDebugMode) {
+                      debugPrint('   - ✅ 배너 변환 성공: "$name" → ${bannerType.name}');
+                    }
+                    return bannerType;
+                  } catch (e) {
+                    if (kDebugMode) {
+                      debugPrint('   - ❌ 알 수 없는 배너 타입: "$name"');
+                    }
+                    return null;
+                  }
+                })
+                .where((e) => e != null)
+                .cast<BannerType>()
+                .toList();
+
+            if (kDebugMode) {
+              debugPrint('   - 변환된 BannerType 목록: ${convertedBanners.map((e) => e.name).toList()}');
+            }
+
             return FutureBuilder<List<Widget>>(
               future: _uiCoordinator.buildActiveBanners(
                 context: context,
-                activeBanners: widget.subscriptionState.activeBanners
-                    .map((name) {
-                      try {
-                        return BannerType.values.firstWhere((e) => e.name == name);
-                      } catch (e) {
-                        if (kDebugMode) {
-                          debugPrint('⚠️ [HomeScreen] 알 수 없는 배너 타입: $name');
-                        }
-                        return null;
-                      }
-                    })
-                    .where((e) => e != null)
-                    .cast<BannerType>()
-                    .toList(),
+                activeBanners: convertedBanners,
                 onShowUpgradeModal: _onShowUpgradeModal,
                 onDismissBanner: _onDismissBanner,
               ),
               builder: (context, snapshot) {
+                if (kDebugMode) {
+                  debugPrint('🏠 [HomeScreen] FutureBuilder 결과:');
+                  debugPrint('   - FutureBuilder 상태: ${snapshot.connectionState}');
+                  debugPrint('   - 에러: ${snapshot.error}');
+                  debugPrint('   - 데이터 있음: ${snapshot.hasData}');
+                }
+                
                 final activeBanners = snapshot.data ?? [];
                 
                 if (kDebugMode) {
-                  debugPrint('🏠 [HomeScreen] 배너 상태:');
-                  debugPrint('   - 구독 상태 배너: ${widget.subscriptionState.activeBanners}');
-                  debugPrint('   - 변환된 BannerType: ${widget.subscriptionState.activeBanners.map((name) => BannerType.values.where((e) => e.name == name).toList()).toList()}');
                   debugPrint('   - 최종 표시될 배너 위젯 수: ${activeBanners.length}');
+                  if (activeBanners.isEmpty) {
+                    debugPrint('   - ⚠️ 배너 위젯이 없는 이유를 확인 필요!');
+                  } else {
+                    debugPrint('   - ✅ 배너 위젯들: ${activeBanners.map((w) => w.runtimeType.toString()).toList()}');
+                  }
                 }
 
                 if (hasNotes) {

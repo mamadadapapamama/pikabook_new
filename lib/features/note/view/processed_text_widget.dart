@@ -9,7 +9,7 @@ import '../../../core/widgets/loading_dots_widget.dart';
 import '../../../core/utils/context_menu_manager.dart';
 
 import '../../../core/services/common/usage_limit_service.dart';
-import '../../../core/widgets/upgrade_modal.dart';
+import '../../../core/widgets/simple_upgrade_modal.dart';
 import '../../tts/unified_tts_button.dart';
 import '../../../core/services/tts/unified_tts_service.dart';
 import 'paragraph_mode_widget.dart';
@@ -193,7 +193,13 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
       
       if (limitStatus['ttsLimitReached'] == true) {
         if (mounted) {
-          await UpgradePromptHelper.showTtsUpgradePrompt(context);
+          // TTS 한도 도달 시 업그레이드 모달 표시
+        final subscriptionState = await UnifiedSubscriptionManager().getSubscriptionState();
+        final modalType = subscriptionState.hasUsedTrial 
+            ? UpgradeModalType.premiumOffer 
+            : UpgradeModalType.trialOffer;
+        
+        SimpleUpgradeModal.show(context, type: modalType);
         }
         return;
       }

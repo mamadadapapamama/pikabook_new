@@ -7,8 +7,9 @@ import '../../core/services/tts/unified_tts_service.dart';
 import '../../core/services/authentication/auth_service.dart';
 import '../sample/sample_tts_service.dart';
 import '../../core/services/common/usage_limit_service.dart';
-import '../../core/widgets/upgrade_modal.dart';
+
 import '../../core/services/subscription/unified_subscription_manager.dart';
+import '../../core/widgets/simple_upgrade_modal.dart';
 
 /// 통합 TTS 전체 재생 버튼
 class UnifiedTtsPlayAllButton extends StatefulWidget {
@@ -73,7 +74,13 @@ class _UnifiedTtsPlayAllButtonState extends State<UnifiedTtsPlayAllButton> {
     
     if (limitStatus['ttsLimitReached'] == true) {
       if (mounted) {
-        await UpgradePromptHelper.showTtsUpgradePrompt(context);
+        // TTS 한도 도달 시 업그레이드 모달 표시
+        final subscriptionState = await UnifiedSubscriptionManager().getSubscriptionState();
+        final modalType = subscriptionState.hasUsedTrial 
+            ? UpgradeModalType.premiumOffer 
+            : UpgradeModalType.trialOffer;
+        
+        SimpleUpgradeModal.show(context, type: modalType);
       }
       return;
     }

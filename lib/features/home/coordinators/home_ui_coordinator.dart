@@ -5,8 +5,9 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/models/banner_type.dart';
 import '../../../core/services/authentication/user_preferences_service.dart';
-import '../../../core/widgets/upgrade_modal.dart';
+import '../../../core/widgets/simple_upgrade_modal.dart';
 import '../../../core/widgets/unified_banner.dart';
+import '../../../core/models/subscription_state.dart';
 
 /// 🎨 HomeScreen UI 관리 Coordinator
 /// 
@@ -26,10 +27,21 @@ class HomeUICoordinator {
     required Function(BannerType) onShowUpgradeModal,
     required Function(BannerType) onDismissBanner,
   }) async {
+    if (kDebugMode) {
+      debugPrint('🎨 [HomeUICoordinator] buildActiveBanners 시작:');
+      debugPrint('   - 입력 배너 수: ${activeBanners.length}');
+      debugPrint('   - 입력 배너 타입들: ${activeBanners.map((e) => e.name).toList()}');
+    }
+    
     final banners = <Widget>[];
     
     // 🎯 닫힌 배너 필터링
     final filteredBanners = await _filterDismissedBanners(activeBanners);
+    
+    if (kDebugMode) {
+      debugPrint('   - 필터링 후 배너 수: ${filteredBanners.length}');
+      debugPrint('   - 필터링 후 배너 타입들: ${filteredBanners.map((e) => e.name).toList()}');
+    }
     
     for (final bannerType in filteredBanners) {
       final buttonText = _getButtonTextForBannerType(bannerType);
@@ -45,6 +57,11 @@ class HomeUICoordinator {
           onDismiss: () => onDismissBanner(bannerType),
         ),
       );
+    }
+    
+    if (kDebugMode) {
+      debugPrint('   - 최종 생성된 배너 위젯 수: ${banners.length}');
+      debugPrint('🎨 [HomeUICoordinator] buildActiveBanners 완료');
     }
     
     return banners;
@@ -115,7 +132,7 @@ class HomeUICoordinator {
     }
   }
 
-  /// 🎉 환영 모달 표시 (지연 후)
+  /// 🎉 환영 모달 표시 (온보딩 후)
   void showWelcomeModalAfterDelay(
     BuildContext context, {
     required Function(bool userChoseTrial) onComplete,
@@ -132,15 +149,14 @@ class HomeUICoordinator {
             debugPrint('🎉 [HomeUICoordinator] 환영 모달 표시 시작');
           }
           
-          UpgradePromptHelper.showWelcomeTrialPrompt(
+          SimpleUpgradeModal.show(
             context,
-            onComplete: (bool userChoseTrial) async {
+            type: UpgradeModalType.trialOffer,
+            onClose: () {
               if (kDebugMode) {
-                debugPrint('✅ [HomeUICoordinator] 환영 모달 완료 - 구매 선택: $userChoseTrial');
+                debugPrint('✅ [HomeUICoordinator] 환영 모달 완료');
               }
-              
-              // 완료 콜백 호출 (구매 선택 여부 전달)
-              onComplete(userChoseTrial);
+              onComplete(false); // 환영 모달은 구매 선택 없이 닫힘
             },
           );
         }
@@ -148,17 +164,10 @@ class HomeUICoordinator {
     });
   }
 
-  /// 💎 업그레이드 모달 표시
-  /// 
-  /// 🔄 BannerType을 UpgradeReason으로 변환하여 적절한 모달 표시
-  /// 각 배너 타입에 따라 다른 업그레이드 이유와 메시지를 제공
-  void showUpgradeModal(BuildContext context, BannerType bannerType) {
-    // 🚨 이미 업그레이드 모달이 표시 중이면 중복 호출 방지
-    if (UpgradeModal.isShowing) {
-      if (kDebugMode) {
-        debugPrint('⚠️ [HomeUICoordinator] 업그레이드 모달이 이미 표시 중입니다. 중복 호출 방지');
-      }
-      return;
+  /// 💎 업그레이드 모달 표시 (단순화됨)
+  void showUpgradeModal(BuildContext context, BannerType bannerType, {SubscriptionState? subscriptionState}) {
+    if (kDebugMode) {
+      debugPrint('🎯 [HomeUICoordinator] 업그레이드 모달 표시: ${bannerType.name}');
     }
 
     // 🔄 BannerType별 처리
@@ -168,21 +177,10 @@ class HomeUICoordinator {
         // 트라이얼 시작 및 프리미엄 시작 배너는 버튼 없음 (닫기만 가능)
         return;
 
-      case BannerType.free:
-      case BannerType.usageLimitFree:
-        _showUpgradeModalWithReason(context, UpgradeReason.limitReached);
-        break;
-
       case BannerType.usageLimitPremium:
         // 프리미엄 플랜 사용량 한도 → 문의 폼으로 처리
         showContactForm(context);
         return;
-
-      case BannerType.switchToPremium: // trialCompleted, premiumExpired 통합
-      case BannerType.trialCancelled:
-      case BannerType.premiumCancelled:
-        _showUpgradeModalWithReason(context, UpgradeReason.trialExpired);
-        break;
 
       case BannerType.premiumGrace:
         // Grace Period → App Store 열기
@@ -190,22 +188,28 @@ class HomeUICoordinator {
         return;
 
       default:
-        _showUpgradeModalWithReason(context, UpgradeReason.general);
+        // 🎯 구독 상태에 따라 모달 타입 결정
+        final modalType = _determineModalType(subscriptionState);
+        SimpleUpgradeModal.show(
+          context,
+          type: modalType,
+        );
     }
   }
 
-  /// 업그레이드 모달 표시 헬퍼
-  void _showUpgradeModalWithReason(BuildContext context, UpgradeReason reason) {
-    if (kDebugMode) {
-      debugPrint('🎯 [HomeUICoordinator] 업그레이드 모달 표시: ${reason.name}');
+  /// 🎯 구독 상태에 따라 모달 타입 결정
+  UpgradeModalType _determineModalType(SubscriptionState? subscriptionState) {
+    if (subscriptionState == null) {
+      return UpgradeModalType.trialOffer;
     }
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => UpgradeModal(reason: reason),
-    );
+    
+    // 무료체험을 사용한 적이 있으면 프리미엄 구독 유도
+    if (subscriptionState.hasUsedTrial) {
+      return UpgradeModalType.premiumOffer;
+    }
+    
+    // 그렇지 않으면 무료체험 유도
+    return UpgradeModalType.trialOffer;
   }
 
   /// 📧 문의 폼 표시 (프리미엄 사용자용)
@@ -229,41 +233,5 @@ class HomeUICoordinator {
         debugPrint('❌ [HomeUICoordinator] 배너 닫기 실패: $e');
       }
     }
-  }
-} 
-
-/// 💎 업그레이드 모달 표시 도우미
-/// 
-/// 책임:
-/// - 온보딩 완료 후 환영 모달 표시
-class UpgradePromptHelper {
-  /// 온보딩 완료 후 환영 모달 표시
-  static void showWelcomeTrialPrompt(
-    BuildContext context, {
-    required Function(bool userChoseTrial) onComplete,
-  }) {
-    if (kDebugMode) {
-      debugPrint('🎉 [UpgradePromptHelper] 환영 모달 표시 준비');
-    }
-    
-    // 화면이 완전히 로드된 후 환영 모달 표시
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      Future.delayed(const Duration(milliseconds: 800), () {
-        if (context.mounted) {
-          if (kDebugMode) {
-            debugPrint('🎉 [UpgradePromptHelper] 환영 모달 표시 시작');
-          }
-          
-          showModalBottomSheet(
-            context: context,
-            isScrollControlled: true,
-            backgroundColor: Colors.transparent,
-            builder: (context) => UpgradeModal(reason: UpgradeReason.welcomeTrial),
-          ).then((_) {
-            onComplete(false); // 환영 모달은 구매 선택 없이 닫힘
-          });
-        }
-      });
-    });
   }
 } 

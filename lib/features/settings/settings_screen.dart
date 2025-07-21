@@ -8,7 +8,7 @@ import '../../core/widgets/loading_experience.dart';
 import '../../../core/widgets/pika_button.dart';
 import '../../core/widgets/pika_app_bar.dart';
 import '../../core/widgets/usage_dialog.dart';
-import '../../core/widgets/upgrade_modal.dart';
+
 import '../../core/widgets/edit_dialog.dart';
 import '../../core/utils/test_data_generator.dart';
 import 'package:flutter/foundation.dart';

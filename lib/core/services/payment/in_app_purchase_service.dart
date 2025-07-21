@@ -9,6 +9,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import '../subscription/unified_subscription_manager.dart';
 import '../notification/notification_service.dart';
 import '../../constants/subscription_constants.dart';
+import '../../utils/snackbar_helper.dart';
 
 /// 🎯 구매 결과 모델
 class PurchaseResult {
@@ -601,9 +602,9 @@ class InAppPurchaseService {
       _processingAttempts.remove(purchaseId);
       _lastProcessTime.remove(purchaseId);
       
-      // 🎯 구매 성공 시 UI 피드백 (Snackbar) - 전역 키 사용
+      // 🎯 구매 성공 시 UI 피드백 (Snackbar) - SnackbarHelper 사용
       if (showSnackbar && result.successMessage != null) {
-        _showGlobalSnackbar(result.successMessage!);
+        SnackbarHelper.showSuccess(result.successMessage!);
       }
       
       // 🎯 Restored 구매의 경우 추가 로깅
@@ -975,4 +976,7 @@ class InAppPurchaseService {
       PurchaseLogger.error('Exception during transaction cleanup: $e');
     }
   }
+
+
+
 } 
