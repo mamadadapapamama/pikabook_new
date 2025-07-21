@@ -378,6 +378,10 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       debugPrint('   - 현재 사용자: ${_user?.uid}');
       debugPrint('   - 현재 구독 상태: ${_subscriptionState.toString()}');
     }
+    
+    // 🎯 UnifiedSubscriptionManager에 현재 상태 제공자 설정
+    UnifiedSubscriptionManager().setCurrentStateProvider(() => _subscriptionState);
+    
     _subscriptionStateSubscription = UnifiedSubscriptionManager().subscriptionStateStream.listen(
       (newState) {
         if (kDebugMode) {
@@ -407,6 +411,10 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     if (kDebugMode) {
       debugPrint('🔕 [App] 구독 상태 스트림 구독 취소');
     }
+    
+    // 🎯 상태 제공자 해제
+    UnifiedSubscriptionManager().setCurrentStateProvider(null);
+    
     _subscriptionStateSubscription?.cancel();
     _subscriptionStateSubscription = null;
   }

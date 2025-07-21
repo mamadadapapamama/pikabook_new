@@ -6,6 +6,7 @@ import '../theme/tokens/color_tokens.dart';
 import '../services/payment/in_app_purchase_service.dart';
 import '../utils/snackbar_helper.dart';
 import 'pika_button.dart';
+import 'dot_loading_indicator.dart';
 
 /// 🎯 업그레이드 모달 타입 (단순화됨)
 enum UpgradeModalType {
@@ -13,8 +14,8 @@ enum UpgradeModalType {
   premiumOffer,     // 프리미엄 구독 유도 (무료체험 사용한 유저)
 }
 
-/// 🎯 단순화된 업그레이드 모달
-class SimpleUpgradeModal extends StatelessWidget {
+/// 🎯 단순화된 업그레이드 모달 (로딩 상태 추가)
+class SimpleUpgradeModal extends StatefulWidget {
   final UpgradeModalType type;
   final VoidCallback? onClose;
 
@@ -23,6 +24,14 @@ class SimpleUpgradeModal extends StatelessWidget {
     required this.type,
     this.onClose,
   }) : super(key: key);
+
+  @override
+  State<SimpleUpgradeModal> createState() => _SimpleUpgradeModalState();
+}
+
+class _SimpleUpgradeModalState extends State<SimpleUpgradeModal> {
+  bool _isLoading = false;
+  String? _loadingMessage;
 
   @override
   Widget build(BuildContext context) {
@@ -36,8 +45,11 @@ class SimpleUpgradeModal extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             _buildHeader(context),
-            _buildContent(),
-            _buildButtons(context),
+            if (_isLoading) 
+              _buildLoadingState()
+            else 
+              _buildContent(),
+            if (!_isLoading) _buildButtons(context),
             SizedBox(height: 16.0),
           ],
         ),
@@ -64,7 +76,7 @@ class SimpleUpgradeModal extends StatelessWidget {
           GestureDetector(
             onTap: () {
               Navigator.of(context).pop();
-              onClose?.call();
+              widget.onClose?.call();
             },
             child: Icon(
               Icons.close,
@@ -124,7 +136,7 @@ class SimpleUpgradeModal extends StatelessWidget {
       child: Column(
         children: [
           // 주요 버튼 (월간/연간)
-          if (type == UpgradeModalType.trialOffer) ...[
+          if (widget.type == UpgradeModalType.trialOffer) ...[
             // 무료체험 유도 - 7일 무료체험 후 월간
             PikaButton(
               text: '7일 무료체험 후 \$3.99 USD/월',
@@ -166,7 +178,7 @@ class SimpleUpgradeModal extends StatelessWidget {
           TextButton(
             onPressed: () {
               Navigator.of(context).pop();
-              onClose?.call();
+              widget.onClose?.call();
             },
             child: Text(
               '나중에 하기',
@@ -181,9 +193,32 @@ class SimpleUpgradeModal extends StatelessWidget {
     );
   }
 
+  /// 로딩 상태 UI
+  Widget _buildLoadingState() {
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: 60.0, horizontal: 24.0),
+      child: Column(
+        children: [
+          DotLoadingIndicator(
+            message: _loadingMessage ?? '구매 처리 중...',
+          ),
+          SizedBox(height: 16.0),
+          Text(
+            '잠시만 기다려 주세요',
+            style: TextStyle(
+              fontSize: 16.0,
+              color: ColorTokens.textSecondary,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
   /// 타입별 제목
   String _getTitle() {
-    switch (type) {
+    switch (widget.type) {
       case UpgradeModalType.trialOffer:
         return '7일 무료체험으로 시작하세요!';
       case UpgradeModalType.premiumOffer:
@@ -193,7 +228,7 @@ class SimpleUpgradeModal extends StatelessWidget {
 
   /// 타입별 설명
   String _getDescription() {
-    switch (type) {
+    switch (widget.type) {
       case UpgradeModalType.trialOffer:
         return '모든 프리미엄 기능을 7일간 무료로 체험해보세요.\n언제든지 취소할 수 있습니다.';
       case UpgradeModalType.premiumOffer:
@@ -203,6 +238,11 @@ class SimpleUpgradeModal extends StatelessWidget {
 
   /// 구매 처리
   Future<void> _handlePurchase(BuildContext context, String planType) async {
+    setState(() {
+      _isLoading = true;
+      _loadingMessage = '구매 처리 중...';
+    });
+
     try {
       final purchaseService = InAppPurchaseService();
       
@@ -225,7 +265,7 @@ class SimpleUpgradeModal extends StatelessWidget {
         // 성공 시 모달 닫기 (Snackbar는 InAppPurchaseService에서 표시됨)
         if (context.mounted) {
           Navigator.of(context).pop();
-          onClose?.call();
+          widget.onClose?.call();
         }
       } else if (result.errorMessage != null) {
         // 에러 시 에러 메시지 표시
@@ -237,6 +277,11 @@ class SimpleUpgradeModal extends StatelessWidget {
         debugPrint('❌ [SimpleUpgradeModal] 구매 처리 오류: $e');
       }
       SnackbarHelper.showError('구매 처리 중 오류가 발생했습니다.');
+    } finally {
+      setState(() {
+        _isLoading = false;
+        _loadingMessage = null;
+      });
     }
   }
 

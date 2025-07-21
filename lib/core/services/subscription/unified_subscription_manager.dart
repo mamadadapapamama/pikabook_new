@@ -14,6 +14,7 @@ import '../../constants/subscription_constants.dart';
 /// 1. Firestore에서 구독 정보 실시간 수신 (주요 경로)
 /// 2. InAppPurchase 서버 응답 즉시 반영 (빠른 UI 반응)
 /// 3. 구독 상태 변경 시 Stream을 통해 앱 전체에 알림
+/// 4. App.dart의 최신 상태를 우선적으로 사용
 class UnifiedSubscriptionManager {
   static final UnifiedSubscriptionManager _instance =
       UnifiedSubscriptionManager._internal();
@@ -35,6 +36,9 @@ class UnifiedSubscriptionManager {
   String? _cachedUserId;
   SubscriptionState? _currentState; // 현재 상태만 메모리에 보관
 
+  // 🎯 App.dart에서 현재 상태를 주입받기 위한 콜백
+  SubscriptionState Function()? _getCurrentStateFromApp;
+
   /// ---------------------------------------------------
   /// 🎯 초기화 및 생명주기
   /// ---------------------------------------------------
@@ -47,6 +51,14 @@ class UnifiedSubscriptionManager {
     _authSubscription?.cancel();
     _firestoreSubscription?.cancel();
     _subscriptionStateController.close();
+  }
+
+  /// 🎯 App.dart에서 현재 상태를 가져오는 콜백 설정
+  void setCurrentStateProvider(SubscriptionState Function()? provider) {
+    _getCurrentStateFromApp = provider;
+    if (kDebugMode) {
+      debugPrint('🔗 [UnifiedSubscriptionManager] App.dart 상태 제공자 ${provider != null ? '설정' : '해제'}');
+    }
   }
 
   /// ---------------------------------------------------
@@ -151,9 +163,30 @@ class UnifiedSubscriptionManager {
   /// 🎯 Public API
   /// ---------------------------------------------------
 
-  /// 현재 구독 상태 조회
+  /// 현재 구독 상태 조회 (App.dart 우선)
   Future<SubscriptionState> getSubscriptionState() async {
-    // 메모리에 있으면 즉시 반환
+    // 🎯 1순위: App.dart에서 현재 상태 가져오기
+    if (_getCurrentStateFromApp != null) {
+      try {
+        final appState = _getCurrentStateFromApp!();
+        if (kDebugMode) {
+          debugPrint('✅ [UnifiedSubscriptionManager] App.dart에서 구독 정보 반환: ${appState.plan.name}');
+        }
+        return appState;
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('⚠️ [UnifiedSubscriptionManager] App.dart 상태 가져오기 실패, 폴백 사용: $e');
+        }
+      }
+    }
+
+    // 🎯 2순위: Firestore에서 직접 로드 (최신 상태 보장)
+    final userId = _auth.currentUser?.uid;
+    if (userId != null) {
+      return _fetchFromFirestore(userId);
+    }
+
+    // 🎯 3순위: 메모리 캐시 (마지막 수단)
     if (_currentState != null) {
       if (kDebugMode) {
         debugPrint('✅ [UnifiedSubscriptionManager] 메모리에서 구독 정보 반환: ${_currentState!.plan.name}');
@@ -161,13 +194,8 @@ class UnifiedSubscriptionManager {
       return _currentState!;
     }
 
-    // 없으면 Firestore에서 로드
-    final userId = _auth.currentUser?.uid;
-    if (userId == null) {
-      return SubscriptionState.defaultState();
-    }
-
-    return _fetchFromFirestore(userId);
+    // 🎯 최후: 기본 상태
+    return SubscriptionState.defaultState();
   }
 
   /// Firestore에서 직접 조회
