@@ -116,17 +116,17 @@ class SubscriptionConstants {
   };
 
   // ────────────────────────────────────────────────────────────────────────
-  // 🎯 CTA 버튼 텍스트 (상태별)
+  // 🎯 CTA 버튼 텍스트 (상태별) - 수동 업그레이드 시스템용
   // ────────────────────────────────────────────────────────────────────────
   
   static const Map<String, String> CTA_TEXTS = {
-    'free_active': '모든 플랜 보기',
-    'premium_active': '앱스토어에서 관리하기',
-    'premium_cancelling': '앱스토어에서 관리하기',
-    'premium_expired': '모든 플랜 보기',
-    'trial_active': '앱스토어에서 관리하기',
-    'trial_cancelling': '앱스토어에서 관리하기',
-    'trial_expired': '프리미엄 시작하기',
+    'free_active': '수동 업그레이드 요청',
+    'premium_active': '현재 프리미엄 이용 중',
+    'premium_cancelling': '현재 프리미엄 이용 중',
+    'premium_expired': '수동 업그레이드 요청',
+    'trial_active': '현재 프리미엄 이용 중',
+    'trial_cancelling': '현재 프리미엄 이용 중',
+    'trial_expired': '수동 업그레이드 요청',
   };
 
   // ────────────────────────────────────────────────────────────────────────

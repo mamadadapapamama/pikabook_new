@@ -16,6 +16,7 @@ import '../../core/widgets/pika_button.dart';
 import '../../core/widgets/simple_upgrade_modal.dart';
 import '../../core/services/common/usage_limit_service.dart';
 import '../../core/widgets/usage_dialog.dart';
+import '../../core/constants/feature_flags.dart'; // 🎯 ManualUpgradeConstants 사용
 
 
 /// CTA 버튼 상태 모델
@@ -164,42 +165,34 @@ class SettingsViewModel extends ChangeNotifier {
   /// CTA 버튼 클릭 처리
   void handleCTAAction(BuildContext context) {
     if (_subscriptionInfo == null) return;
-    
+
     final ctaText = _subscriptionInfo!.ctaText;
     final entitlement = _subscriptionInfo!.entitlement.name;
     final status = _subscriptionInfo!.subscriptionStatus.name;
-    
+
     if (kDebugMode) {
       print('🎯 [Settings] CTA 액션 처리: $ctaText (${entitlement}_$status)');
     }
-    
-    // 🎯 새로운 CTA 로직
+
+    // 🎯 수동 업그레이드 시스템용 CTA 로직
     switch ('${entitlement}_$status') {
       case 'premium_active':
       case 'premium_cancelling':
       case 'trial_active':
       case 'trial_cancelling':
-        // 앱스토어로 이동
-        _openAppStore();
+        // 프리미엄 상태일 때는 아무 액션 없음 (버튼이 "현재 프리미엄 이용 중"으로 표시)
+        if (kDebugMode) {
+          print('✅ [Settings] 현재 프리미엄 이용 중 - 액션 없음');
+        }
         break;
-        
+
       case 'free_active':
       case 'premium_expired':
-        // hasUsedTrial에 따라 모달 타입 결정
-        final modalType = (_subscriptionInfo!.hasUsedTrial) 
-            ? UpgradeModalType.premiumOffer  // 프리미엄 모달
-            : UpgradeModalType.trialOffer;   // 환영 모달
-        _showUpgradeModal(context, modalType);
-        break;
-        
       case 'trial_expired':
-        // 프리미엄 모달
-        _showUpgradeModal(context, UpgradeModalType.premiumOffer);
-        break;
-        
       default:
-        // 기본값: 환영 모달
-        _showUpgradeModal(context, UpgradeModalType.trialOffer);
+        // 무료 상태이거나 만료된 상태일 때는 수동 업그레이드 폼으로 연결
+        _openManualUpgradeForm();
+        break;
     }
   }
 
@@ -258,6 +251,21 @@ class SettingsViewModel extends ChangeNotifier {
     } else {
       if (kDebugMode) {
         print('❌ [Settings] App Store 구독 관리 페이지 열기 실패');
+      }
+    }
+  }
+
+  /// 🎯 수동 업그레이드 폼으로 이동
+  void _openManualUpgradeForm() async {
+    final url = Uri.parse(ManualUpgradeConstants.MANUAL_UPGRADE_FORM_URL);
+    if (kDebugMode) {
+      print('📝 [Settings] 수동 업그레이드 폼으로 이동: $url');
+    }
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    } else {
+      if (kDebugMode) {
+        print('❌ [Settings] 수동 업그레이드 폼 열기 실패');
       }
     }
   }

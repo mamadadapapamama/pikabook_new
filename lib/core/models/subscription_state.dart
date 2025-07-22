@@ -131,27 +131,8 @@ class SubscriptionInfo {
   }
 
   String? get dateInfoText {
-    if (expirationDate == null) return null;
-    final expiry = DateTime.tryParse(expirationDate!);
-    if (expiry == null) return null;
-
-    final now = DateTime.now();
-    final diff = expiry.difference(now);
-
-    if (diff.inDays < 0) {
-      return '만료됨';
-    } else if (diff.inDays < 1) {
-      final hours = diff.inHours;
-      return '${hours}시간 후 만료';
-    } else if (diff.inDays < 7) {
-      return '${diff.inDays}일 후 만료';
-    } else {
-      // 🎯 구독 갱신일 형식: 2025.01.01
-      final year = expiry.year;
-      final month = expiry.month.toString().padLeft(2, '0');
-      final day = expiry.day.toString().padLeft(2, '0');
-      return '구독 갱신일: $year.$month.$day';
-    }
+    // 🎯 수동 업그레이드 시스템에서는 만료일과 갱신일 표시하지 않음
+    return null;
   }
 
   String get ctaText {

@@ -39,7 +39,9 @@ class PlanCard extends StatelessWidget {
                 text: subscriptionInfo.ctaText,
                 variant: subscriptionInfo.entitlement == Entitlement.free ? PikaButtonVariant.primary : PikaButtonVariant.outline,
                 size: PikaButtonSize.small,
-                onPressed: () => viewModel.handleCTAAction(context),
+                onPressed: subscriptionInfo.entitlement == Entitlement.premium 
+                    ? null // 🎯 프리미엄 상태일 때는 버튼 비활성화
+                    : () => viewModel.handleCTAAction(context),
                 isFullWidth: true,
               ),
               if (subscriptionInfo.ctaSubtext != null) ...[
