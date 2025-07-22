@@ -373,12 +373,19 @@ class NoteDetailViewModel extends ChangeNotifier {
         final pageId = _pages![i].id;
         final processedText = result['processedText'] as ProcessedText?;
         final status = result['status'] as ProcessingStatus;
+        final error = result['error'] as String?; // 🎯 에러 정보 추가
         
         // processedText가 null이 아닐 때만 저장
         if (processedText != null) {
           _processedTexts[pageId] = processedText;
         }
         _pageStatuses[pageId] = status;
+        
+        // 🎯 에러 정보가 있으면 저장
+        if (error != null) {
+          _textErrors[pageId] = error;
+        }
+        
         hasAnyUpdate = true;
       }
     }
@@ -400,7 +407,33 @@ class NoteDetailViewModel extends ChangeNotifier {
         // 샘플 모드: SampleDataService 사용
         processedText = _sampleDataService.getProcessedText(pageId);
       } else {
-        // 일반 모드: TextProcessingService 사용
+        // 🎯 일반 모드: 먼저 페이지 에러 상태 확인
+        final pageDoc = await FirebaseFirestore.instance
+            .collection('pages')
+            .doc(pageId)
+            .get();
+        
+        if (pageDoc.exists) {
+          final pageData = pageDoc.data() as Map<String, dynamic>;
+          final status = pageData['status'] as String?;
+          final errorMessage = pageData['errorMessage'] as String?;
+          
+          // 🎯 에러 상태인 경우 에러 정보 반환
+          if (status == ProcessingStatus.failed.toString() && errorMessage != null) {
+            if (kDebugMode) {
+              debugPrint('🚨 초기 로드에서 페이지 에러 감지: $pageId');
+              debugPrint('   에러 메시지: $errorMessage');
+            }
+            
+            return {
+              'processedText': null,
+              'status': ProcessingStatus.failed,
+              'error': errorMessage,
+            };
+          }
+        }
+        
+        // 🎯 에러가 없는 경우 텍스트 처리 서비스 사용
         processedText = await _textProcessingService.getProcessedText(pageId);
       }
       
@@ -433,6 +466,7 @@ class NoteDetailViewModel extends ChangeNotifier {
       return {
         'processedText': null,
         'status': ProcessingStatus.failed,
+        'error': '텍스트 로드 중 오류: $e',
       };
     }
   }
@@ -471,8 +505,8 @@ class NoteDetailViewModel extends ChangeNotifier {
           _textErrors[pageId] = '샘플 텍스트를 찾을 수 없습니다';
         }
       } else {
-        // 일반 모드: Firebase 및 TextProcessingService 사용
-        // 페이지 에러 상태 확인
+        // 🎯 일반 모드: Firebase 및 TextProcessingService 사용
+        // 페이지 에러 상태 먼저 확인
         final pageDoc = await FirebaseFirestore.instance
             .collection('pages')
             .doc(pageId)
@@ -483,6 +517,7 @@ class NoteDetailViewModel extends ChangeNotifier {
           final status = pageData['status'] as String?;
           final errorMessage = pageData['errorMessage'] as String?;
           
+          // 🎯 에러 상태인 경우 즉시 에러 표시
           if (status == ProcessingStatus.failed.toString() && errorMessage != null) {
             if (_disposed) return;
             
@@ -490,12 +525,17 @@ class NoteDetailViewModel extends ChangeNotifier {
             _textErrors[pageId] = errorMessage;
             _pageStatuses[pageId] = ProcessingStatus.failed;
             
+            if (kDebugMode) {
+              debugPrint('🚨 페이지 에러 상태 감지: $pageId');
+              debugPrint('   에러 메시지: $errorMessage');
+            }
+            
             if (!_disposed) notifyListeners();
             return;
           }
         }
         
-        // 텍스트 처리 서비스 사용
+        // 🎯 에러가 없는 경우 텍스트 처리 서비스 사용
         processedText = await _textProcessingService.getProcessedText(pageId);
         
         if (_disposed) return;
