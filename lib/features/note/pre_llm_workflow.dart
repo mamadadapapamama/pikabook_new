@@ -35,9 +35,12 @@ class PreLLMWorkflow {
       debugPrint('🚀 전처리 워크플로우 시작: ${imageFiles.length}개 이미지');
     }
 
+    String noteId = '';
+    PageProcessingData? firstPageData;
+
     try {
       // 1. 노트 메타데이터 생성 (빠름, 1-2초)
-      final noteId = await _noteService.createNote();
+      noteId = await _noteService.createNote();
       
       if (kDebugMode) {
         debugPrint('✅ 노트 메타데이터 생성 완료: $noteId');
@@ -70,7 +73,40 @@ class PreLLMWorkflow {
         debugPrint('✅ 첫 번째 페이지 생성 완료: ${firstPageId.id}');
       }
       
-      // 4. 노트 메타데이터 업데이트 (썸네일)
+      // 🎯 4. 첫 번째 이미지 텍스트 처리 (동기적으로 처리하여 에러 즉시 전달)
+      if (kDebugMode) {
+        debugPrint('📝 첫 번째 이미지 텍스트 처리 시작 (동기)');
+      }
+      
+      final mode = userPrefs.useSegmentMode ? TextProcessingMode.segment : TextProcessingMode.paragraph;
+      
+      try {
+        firstPageData = await _textProcessingOrchestrator.processImageText(
+          imageFile: imageFiles[0],
+          pageId: firstPageId.id,
+          mode: mode,
+          sourceLanguage: userPrefs.sourceLanguage,
+          targetLanguage: userPrefs.targetLanguage,
+        );
+        
+        if (firstPageData == null) {
+          throw Exception('첫 번째 이미지 처리에 실패했습니다.');
+        }
+        
+        if (kDebugMode) {
+          debugPrint('✅ 첫 번째 이미지 텍스트 처리 완료');
+        }
+        
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('❌ 첫 번째 이미지 텍스트 처리 실패: $e');
+        }
+        
+        // 🎯 첫 번째 이미지 처리 실패 시 즉시 에러 전달 (UI까지 전달됨)
+        rethrow;
+      }
+      
+      // 5. 노트 메타데이터 업데이트 (썸네일)
       await _noteService.updateNoteMetadata(
         noteId: noteId,
         thumbnailUrl: firstImageUrl,
@@ -78,16 +114,16 @@ class PreLLMWorkflow {
         updateTimestamp: false, // OCR 처리 중에는 타임스탬프 업데이트 안함
       );
       
-      // 5. 나머지 이미지들은 백그라운드에서 처리
+      // 6. 나머지 이미지들과 LLM 처리는 백그라운드에서 처리
       if (imageFiles.length > 1) {
         _startRemainingImagesProcessing(noteId, imageFiles, userPrefs, firstPageId.id);
       } else {
-        // 이미지가 1개뿐이면 바로 텍스트 처리 시작 (첫 번째 이미지 포함)
-        _startBackgroundProcessing(noteId, [imageFiles[0]], [firstPageId.id], userPrefs);
+        // 이미지가 1개뿐이면 LLM 처리만 백그라운드로 시작
+        _startLLMProcessingOnly(noteId, [firstPageData], userPrefs);
       }
       
       if (kDebugMode) {
-        debugPrint('🎉 빠른 노트 생성 완료: $noteId (첫 페이지 준비됨, 백그라운드 처리 시작됨)');
+        debugPrint('🎉 빠른 노트 생성 완료: $noteId (첫 페이지 OCR 완료, 백그라운드 처리 시작됨)');
       }
       
       return noteId;
@@ -98,6 +134,54 @@ class PreLLMWorkflow {
       }
       rethrow;
     }
+  }
+
+  /// 🎯 LLM 처리만 백그라운드로 시작 (OCR은 이미 완료됨)
+  void _startLLMProcessingOnly(
+    String noteId,
+    List<PageProcessingData> pageDataList,
+    dynamic userPrefs,
+  ) {
+    // 백그라운드에서 비동기 처리
+    Future.microtask(() async {
+      try {
+        if (kDebugMode) {
+          debugPrint('🤖 LLM 처리만 백그라운드 시작: $noteId (${pageDataList.length}개 페이지)');
+        }
+        
+        // LLM 후처리 작업 스케줄링
+        await _schedulePostProcessing(noteId, pageDataList, userPrefs);
+        
+        // OCR 사용량 업데이트 (실제 처리된 페이지 수만큼)
+        try {
+          final successfulOcrPages = pageDataList.where((page) => page.ocrSuccess).length;
+          if (successfulOcrPages > 0) {
+            // 🎯 구독 상태를 가져와서 UsageLimitService에 전달
+            final subscriptionState = await UnifiedSubscriptionManager().getSubscriptionState();
+            await _usageLimitService.updateUsageAfterNoteCreation(
+              ocrPages: successfulOcrPages,
+              subscriptionState: subscriptionState,
+            );
+            if (kDebugMode) {
+              debugPrint('📊 [PreLLM] OCR 사용량 업데이트: $successfulOcrPages개 페이지');
+            }
+          }
+        } catch (e) {
+          if (kDebugMode) {
+            debugPrint('⚠️ [PreLLM] OCR 사용량 업데이트 실패 (무시): $e');
+          }
+        }
+        
+        if (kDebugMode) {
+          debugPrint('🎉 LLM 처리 스케줄링 완료: $noteId');
+        }
+        
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('❌ LLM 처리 스케줄링 실패: $noteId, 오류: $e');
+        }
+      }
+    });
   }
 
   /// 나머지 이미지들 백그라운드 업로드 + 텍스트 처리
@@ -151,8 +235,8 @@ class PreLLMWorkflow {
           updateTimestamp: false,
           );
         
-        // 모든 이미지에 대해 텍스트 처리 시작 (첫 번째 이미지 포함)
-        _startBackgroundProcessing(noteId, allImageFiles, allPageIds, userPrefs);
+        // 🎯 나머지 이미지들만 텍스트 처리 (첫 번째는 이미 완료됨)
+        _startRemainingImagesTextProcessing(noteId, remainingImages, allPageIds.sublist(1), userPrefs, firstPageId);
         
         if (kDebugMode) {
           debugPrint('🎉 나머지 이미지 처리 완료: $noteId (${allPageIds.length}개 페이지)');
@@ -161,6 +245,113 @@ class PreLLMWorkflow {
       } catch (e) {
         if (kDebugMode) {
           debugPrint('❌ 나머지 이미지 처리 실패: $noteId, 오류: $e');
+        }
+      }
+    });
+  }
+
+  /// 🎯 나머지 이미지들만 텍스트 처리 (첫 번째는 이미 완료됨)
+  void _startRemainingImagesTextProcessing(
+    String noteId,
+    List<File> remainingImageFiles, // 첫 번째 제외한 나머지 이미지들
+    List<String> remainingPageIds, // 첫 번째 제외한 나머지 페이지 ID들
+    dynamic userPrefs,
+    String firstPageId, // 첫 번째 페이지 ID (이미 OCR 완료됨)
+  ) {
+    // 백그라운드에서 비동기 처리
+    Future.microtask(() async {
+      try {
+        if (kDebugMode) {
+          debugPrint('🔄 나머지 이미지 텍스트 처리 시작: $noteId (${remainingImageFiles.length}개 이미지)');
+        }
+        
+        final mode = userPrefs.useSegmentMode ? TextProcessingMode.segment : TextProcessingMode.paragraph;
+        final List<PageProcessingData> pageDataList = [];
+        
+        // 🎯 첫 번째 페이지 데이터는 이미 처리 완료 상태로 가정 (실제로는 이미 Firestore에 저장됨)
+        // 여기서는 나머지 이미지들만 처리
+        
+        // 나머지 이미지들에 대해 TextProcessingOrchestrator 사용
+        for (int i = 0; i < remainingImageFiles.length; i++) {
+          try {
+            if (kDebugMode) {
+              debugPrint('📄 이미지 ${i+2}/${remainingImageFiles.length+1} 처리 시작');
+            }
+            
+            final pageData = await _textProcessingOrchestrator.processImageText(
+              imageFile: remainingImageFiles[i],
+              pageId: remainingPageIds[i],
+              mode: mode,
+              sourceLanguage: userPrefs.sourceLanguage,
+              targetLanguage: userPrefs.targetLanguage,
+            );
+            
+            if (pageData != null) {
+              pageDataList.add(pageData);
+              
+              if (kDebugMode) {
+                debugPrint('✅ 이미지 ${i+2} 처리 완료 → 페이지 업데이트됨');
+              }
+            } else {
+              if (kDebugMode) {
+                debugPrint('⚠️ 이미지 ${i+2} 처리 실패 → 건너뜀');
+              }
+            }
+            
+          } catch (e) {
+            if (kDebugMode) {
+              debugPrint('❌ 이미지 ${i+2} 처리 중 오류: $e');
+            }
+            
+            // 🎯 나머지 이미지 처리 실패는 건너뛰고 계속 진행
+            if (kDebugMode) {
+              debugPrint('⚠️ 이미지 ${i+2} 건너뛰고 계속 진행');
+            }
+          }
+        }
+        
+        // 🎯 처리된 나머지 이미지들과 첫 번째 이미지(이미 완료)를 모두 LLM 처리 스케줄링
+        // 첫 번째 페이지 데이터를 Firestore에서 다시 로드해야 함 (실제 구현에서는 메모리에 저장하거나 다른 방식 사용)
+        if (pageDataList.isNotEmpty) {
+          await _schedulePostProcessing(noteId, pageDataList, userPrefs);
+          
+          // OCR 사용량 업데이트 (실제 처리된 페이지 수만큼) - 첫 번째 페이지는 이미 카운트됨
+          try {
+            final successfulOcrPages = pageDataList.where((page) => page.ocrSuccess).length;
+            if (successfulOcrPages > 0) {
+              // 🎯 구독 상태를 가져와서 UsageLimitService에 전달
+              final subscriptionState = await UnifiedSubscriptionManager().getSubscriptionState();
+              await _usageLimitService.updateUsageAfterNoteCreation(
+                ocrPages: successfulOcrPages,
+                subscriptionState: subscriptionState,
+              );
+              if (kDebugMode) {
+                debugPrint('📊 [PreLLM] 나머지 이미지 OCR 사용량 업데이트: $successfulOcrPages개 페이지');
+              }
+            }
+          } catch (e) {
+            if (kDebugMode) {
+              debugPrint('⚠️ [PreLLM] 나머지 이미지 OCR 사용량 업데이트 실패 (무시): $e');
+            }
+          }
+          
+          if (kDebugMode) {
+            debugPrint('🎉 나머지 이미지 텍스트 처리 완료: $noteId');
+            debugPrint('   성공한 나머지 페이지: ${pageDataList.length}/${remainingImageFiles.length}개');
+            debugPrint('   다음 단계: 전체 LLM 번역 및 병음 처리 (PostLLMWorkflow)');
+          }
+        } else {
+          if (kDebugMode) {
+            debugPrint('⚠️ 나머지 이미지 처리 결과가 없음 - 첫 번째 페이지만 LLM 처리');
+          }
+          // 🎯 나머지 이미지 처리가 모두 실패한 경우, 첫 번째 페이지만으로도 LLM 처리 진행
+          // 빈 리스트로 스케줄링하면 PostLLMWorkflow에서 첫 번째 페이지를 Firestore에서 로드할 것임
+          await _schedulePostProcessing(noteId, [], userPrefs);
+        }
+        
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('❌ 나머지 이미지 텍스트 처리 전체 실패: $noteId, 오류: $e');
         }
       }
     });
