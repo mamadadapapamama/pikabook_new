@@ -210,55 +210,26 @@ class PreLLMWorkflow {
                 debugPrint('⚠️ 이미지 ${i+1} 처리 실패 → 건너뜀');
               }
             }
+            
           } catch (e) {
             if (kDebugMode) {
-              debugPrint('❌ 이미지 ${i+1} 처리 실패: $e');
+              debugPrint('❌ 이미지 ${i+1} 처리 중 오류: $e');
             }
             
-            // 중국어 감지 실패의 경우 전체 노트 생성 중단
-            if (e.toString().contains('중국어가 없습니다')) {
+            // 🎯 첫 번째 이미지 처리 실패 시 전체 노트 생성 실패로 처리
+            if (i == 0) {
               if (kDebugMode) {
-                debugPrint('🛑 중국어 감지 실패로 전체 노트 생성 중단');
+                debugPrint('🚨 첫 번째 이미지 처리 실패 - 전체 노트 생성 중단');
               }
               
-              // 노트 상태를 실패로 업데이트 (Firestore 직접 업데이트)
-              try {
-                await FirebaseFirestore.instance.collection('notes').doc(noteId).update({
-                  'processingStatus': ProcessingStatus.failed.toString(),
-                  'errorMessage': e.toString(),
-                  'errorType': 'NO_CHINESE_DETECTED',
-                  'failedAt': FieldValue.serverTimestamp(),
-                });
-              } catch (updateError) {
-                if (kDebugMode) {
-                  debugPrint('⚠️ 노트 실패 상태 저장 실패: $updateError');
-                }
-              }
-              
-              // 백그라운드 처리에서는 rethrow하지 않고 조용히 종료
-              // UI 매니저는 이미 성공 상태로 노트 상세 화면으로 이동함
-              return; // rethrow 제거
+              // 🎯 구체적인 에러 메시지를 그대로 전파
+              rethrow; // TextProcessingOrchestrator에서 생성된 구체적인 에러 메시지 전파
             }
             
-            // 기타 에러의 경우 페이지별 실패 처리 (기존 로직 유지)
-            try {
-              await _pageService.updatePage(pageIds[i], {
-                'status': ProcessingStatus.failed.toString(),
-                'errorMessage': e.toString(),
-                'errorType': 'PROCESSING_ERROR',
-                'ocrCompletedAt': FieldValue.serverTimestamp(),
-              });
-              
-              if (kDebugMode) {
-                debugPrint('📝 페이지 에러 상태 저장: ${pageIds[i]}');
-              }
-            } catch (updateError) {
-              if (kDebugMode) {
-                debugPrint('⚠️ 페이지 에러 상태 저장 실패: $updateError');
-              }
+            // 🎯 첫 번째가 아닌 이미지는 건너뛰고 계속 진행
+            if (kDebugMode) {
+              debugPrint('⚠️ 이미지 ${i+1} 건너뛰고 계속 진행');
             }
-            
-            // 개별 페이지 실패는 전체 프로세스를 중단시키지 않음
           }
         }
         

@@ -78,6 +78,8 @@ class TextProcessingOrchestrator {
       // 1단계: OCR 텍스트 추출
       final rawText = await _extractTextFromImage(imageFile);
       if (rawText.isEmpty) {
+        // 🎯 OCR 결과가 없을 때 페이지에 에러 상태 기록
+        await _updatePageWithError(pageId, '이미지에서 텍스트를 찾을 수 없습니다. 다른 이미지를 시도해주세요.');
         return _createEmptyPageData(pageId, mode, sourceLanguage, targetLanguage, imageFile);
       }
 
@@ -103,7 +105,11 @@ class TextProcessingOrchestrator {
           if (kDebugMode) {
             debugPrint('❌ OCR 후처리 결과가 비어있음 - 중국어 감지 실패');
           }
-          throw Exception('공유해주신 이미지에 중국어가 없습니다.\n다른 이미지를 업로드해 주세요.');
+          
+          // 🎯 페이지에 중국어 감지 실패 에러 기록
+          const errorMessage = '공유해주신 이미지에 중국어가 없습니다. 다른 이미지를 업로드해 주세요.';
+          await _updatePageWithError(pageId, errorMessage);
+          throw Exception(errorMessage);
         }
         
         // 텍스트 분리
@@ -132,7 +138,11 @@ class TextProcessingOrchestrator {
           if (kDebugMode) {
             debugPrint('❌ Paragraph 모드: 중국어 감지 실패');
           }
-          throw Exception('공유해주신 이미지에 중국어가 없습니다.\n다른 이미지를 업로드해 주세요.');
+          
+          // 🎯 페이지에 중국어 감지 실패 에러 기록
+          const errorMessage = '공유해주신 이미지에 중국어가 없습니다. 다른 이미지를 업로드해 주세요.';
+          await _updatePageWithError(pageId, errorMessage);
+          throw Exception(errorMessage);
         }
         
         textSegments = []; // 빈 배열 (LLM에서 블록 타입별로 재구성)
@@ -168,14 +178,55 @@ class TextProcessingOrchestrator {
       return pageData;
 
     } catch (e) {
+      // 🎯 구체적인 에러 메시지 생성 및 페이지에 기록
+      String errorMessage;
+      
+      if (e.toString().contains('중국어가 없습니다')) {
+        errorMessage = '공유해주신 이미지에 중국어가 없습니다. 다른 이미지를 업로드해 주세요.';
+      } else if (e.toString().contains('timeout') || e.toString().contains('타임아웃')) {
+        errorMessage = '현재 노트 처리가 되지 않고 있습니다. 잠시 후에 다시 시도해 주세요.';
+      } else if (e.toString().contains('network') || e.toString().contains('네트워크')) {
+        errorMessage = '인터넷 연결을 확인해주세요.';
+      } else if (e.toString().contains('server') || e.toString().contains('서버')) {
+        errorMessage = '서버 연결에 문제가 있습니다. 잠시 후에 다시 시도해 주세요.';
+      } else {
+        errorMessage = '현재 노트 처리가 되지 않고 있습니다. 잠시 후에 다시 시도해 주세요.';
+      }
+      
       if (kDebugMode) {
         debugPrint('❌ TextProcessingOrchestrator: 처리 실패 - $e');
+        debugPrint('🎯 사용자에게 표시할 에러 메시지: $errorMessage');
       }
-      return null;
+      
+      // 🎯 페이지에 에러 상태 기록 (UI에서 표시됨)
+      await _updatePageWithError(pageId, errorMessage);
+      
+      // 🎯 에러를 다시 throw하여 상위 호출자에게 전달
+      throw Exception(errorMessage);
     }
   }
 
   // ========== 내부 처리 메서드들 ==========
+
+  /// 🎯 페이지에 에러 상태 기록 (UI에서 표시하기 위함)
+  Future<void> _updatePageWithError(String pageId, String errorMessage) async {
+    try {
+      await _pageService.updatePage(pageId, {
+        'status': ProcessingStatus.failed.toString(),
+        'errorMessage': errorMessage,
+        'errorOccurredAt': FieldValue.serverTimestamp(),
+      });
+      
+      if (kDebugMode) {
+        debugPrint('🚨 페이지 에러 상태 기록: $pageId');
+        debugPrint('   에러 메시지: $errorMessage');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('⚠️ 페이지 에러 상태 기록 실패: $e');
+      }
+    }
+  }
 
   /// 1단계: 이미지에서 텍스트 추출
   Future<String> _extractTextFromImage(File imageFile) async {
@@ -183,18 +234,33 @@ class TextProcessingOrchestrator {
       debugPrint('🔍 1단계: OCR 텍스트 추출 시작');
     }
 
-    final rawText = await _ocrService.extractText(imageFile, skipUsageCount: true);
+    try {
+      final rawText = await _ocrService.extractText(imageFile, skipUsageCount: true);
 
-    if (kDebugMode) {
-      debugPrint('✅ OCR 완료: ${rawText.length}자');
-      if (rawText.isNotEmpty) {
-        final preview = rawText.length > 30 ? 
-            '${rawText.substring(0, 30)}...' : rawText;
-        debugPrint('📄 OCR 원본 텍스트: "$preview"');
+      if (kDebugMode) {
+        debugPrint('✅ OCR 완료: ${rawText.length}자');
+        if (rawText.isNotEmpty) {
+          final preview = rawText.length > 30 ? 
+              '${rawText.substring(0, 30)}...' : rawText;
+          debugPrint('📄 OCR 원본 텍스트: "$preview"');
+        }
+      }
+
+      return rawText;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ OCR 텍스트 추출 실패: $e');
+      }
+      
+      // 🎯 OCR 실패 시 구체적인 에러 메시지 생성
+      if (e.toString().contains('timeout') || e.toString().contains('타임아웃')) {
+        throw Exception('현재 노트 처리가 되지 않고 있습니다. 잠시 후에 다시 시도해 주세요.');
+      } else if (e.toString().contains('network') || e.toString().contains('네트워크')) {
+        throw Exception('인터넷 연결을 확인해주세요.');
+      } else {
+        throw Exception('이미지 처리 중 문제가 발생했습니다. 다른 이미지를 시도해주세요.');
       }
     }
-
-    return rawText;
   }
 
   /// 2단계: OCR 텍스트 후처리
@@ -203,32 +269,41 @@ class TextProcessingOrchestrator {
       debugPrint('🧹 2단계: OCR 후처리 시작 (정리 + 제목 감지)');
     }
 
-    final ocrResult = _postOcrProcessor.processOcrResult(rawText);
+    try {
+      final ocrResult = _postOcrProcessor.processOcrResult(rawText);
 
-    if (kDebugMode) {
-      debugPrint('✅ OCR 후처리 완료: ${rawText.length}자 → ${ocrResult.reorderedText.length}자');
-      debugPrint('   제목 후보: ${ocrResult.titleCandidates.length}개');
-      debugPrint('   본문: ${ocrResult.bodyText.length}개 문장');
-      
-      // 감지된 제목들 상세 로그
-      for (int i = 0; i < ocrResult.titleCandidates.length; i++) {
-        final title = ocrResult.titleCandidates[i];
-        debugPrint('   📋 제목 ${i+1}: "${title.text}" (신뢰도: ${title.confidence.toStringAsFixed(2)})');
+      if (kDebugMode) {
+        debugPrint('✅ OCR 후처리 완료: ${rawText.length}자 → ${ocrResult.reorderedText.length}자');
+        debugPrint('   제목 후보: ${ocrResult.titleCandidates.length}개');
+        debugPrint('   본문: ${ocrResult.bodyText.length}개 문장');
+        
+        // 감지된 제목들 상세 로그
+        for (int i = 0; i < ocrResult.titleCandidates.length; i++) {
+          final title = ocrResult.titleCandidates[i];
+          debugPrint('   📋 제목 ${i+1}: "${title.text}" (신뢰도: ${title.confidence.toStringAsFixed(2)})');
+        }
+        
+        // 처리 과정 로그 출력
+        for (final step in ocrResult.processingSteps) {
+          debugPrint('   🔄 $step');
+        }
+        
+        if (ocrResult.reorderedText.isNotEmpty) {
+          final preview = ocrResult.reorderedText.length > 30 ? 
+              '${ocrResult.reorderedText.substring(0, 30)}...' : ocrResult.reorderedText;
+          debugPrint('🧹 재배열된 텍스트: "$preview"');
+        }
+      }
+
+      return ocrResult;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ OCR 후처리 실패: $e');
       }
       
-      // 처리 과정 로그 출력
-      for (final step in ocrResult.processingSteps) {
-        debugPrint('   🔄 $step');
-      }
-      
-      if (ocrResult.reorderedText.isNotEmpty) {
-        final preview = ocrResult.reorderedText.length > 30 ? 
-            '${ocrResult.reorderedText.substring(0, 30)}...' : ocrResult.reorderedText;
-        debugPrint('🧹 재배열된 텍스트: "$preview"');
-      }
+      // 🎯 OCR 후처리 실패 시 구체적인 에러 메시지 생성
+      throw Exception('텍스트 처리 중 문제가 발생했습니다. 다른 이미지를 시도해주세요.');
     }
-
-    return ocrResult;
   }
 
   /// 3단계: PageProcessingData 생성

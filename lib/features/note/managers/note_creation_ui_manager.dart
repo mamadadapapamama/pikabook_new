@@ -57,20 +57,20 @@ class NoteCreationUIManager {
     bool isSuccess = false;
 
     try {
-      // 1. 로딩 다이얼로그 표시 (즉시 표시)
+      // 1. 로딩 다이얼로그 표시 (30초 타임아웃)
       if (showLoadingDialog) {
         NoteCreationLoader.show(
           rootContext,
           message: '스마트 노트를 만들고 있어요.\n잠시만 기다려 주세요.',
-          timeoutSeconds: 60, // 첫 이미지 업로드까지 기다리므로 시간 증가
+          timeoutSeconds: 30, // 🎯 30초로 단축
           onTimeout: () {
             if (rootContext.mounted) {
               if (kDebugMode) {
-                debugPrint('⏰ 노트 생성 타임아웃 발생');
+                debugPrint('⏰ 노트 생성 30초 타임아웃 발생');
               }
               ErrorHandler.showErrorSnackBar(
                 rootContext, 
-                '문제가 지속되고 있어요. 잠시 뒤에 다시 시도해 주세요.'
+                '현재 노트 처리가 되지 않고 있습니다. 잠시 후에 다시 시도해 주세요.' // 🎯 사용자 요구사항 반영
               );
             }
           },
@@ -83,7 +83,7 @@ class NoteCreationUIManager {
         await _closeBottomSheet(context);
       }
 
-      // 3. 첫 번째 이미지 업로드 및 첫 페이지 생성까지 완료 (기존보다 시간 더 걸림)
+      // 3. 첫 번째 이미지 업로드 및 첫 페이지 생성까지 완료 (30초 내 완료 목표)
       if (kDebugMode) {
         debugPrint('🚀 빠른 노트 생성 시작: ${imageFiles.length}개 이미지');
       }
@@ -107,31 +107,29 @@ class NoteCreationUIManager {
       }
       isSuccess = false;
       
-      // 중국어 감지 실패의 경우 특별 처리
+      // 🎯 구체적인 에러 메시지 처리
+      String errorMessage = '현재 노트 처리가 되지 않고 있습니다. 잠시 후에 다시 시도해 주세요.'; // 기본 메시지
+      
       if (e.toString().contains('중국어가 없습니다')) {
-        // 로딩 다이얼로그가 표시되지 않은 경우에도 처리
-        if (rootContext.mounted) {
-          // 로딩 다이얼로그가 표시된 경우 닫기 (지연시간 최적화)
-          if (loadingDialogShown || NoteCreationLoader.isVisible) {
-            NoteCreationLoader.hide(rootContext);
-            await Future.delayed(const Duration(milliseconds: 100)); // 300ms → 100ms
-          }
-          
-          // 중국어 감지 실패 전용 에러 메시지
-          ErrorHandler.showErrorSnackBar(
-            rootContext,
-            '공유해주신 이미지에 중국어가 없습니다.\n다른 이미지를 업로드해 주세요.',
-          );
-        }
-        return; // 중국어 감지 실패 시 바로 종료
+        errorMessage = '공유해주신 이미지에 중국어가 없습니다. 다른 이미지를 업로드해 주세요.';
+      } else if (e.toString().contains('네트워크')) {
+        errorMessage = '인터넷 연결을 확인해주세요.';
+      } else if (e.toString().contains('timeout') || e.toString().contains('타임아웃')) {
+        errorMessage = '현재 노트 처리가 되지 않고 있습니다. 잠시 후에 다시 시도해 주세요.';
       }
       
-      // 기타 에러 처리 - 로딩 다이얼로그만 닫고 _handleCreationResult에서 에러 처리
-      if (loadingDialogShown && rootContext.mounted) {
-        NoteCreationLoader.hide(rootContext);
-        await Future.delayed(const Duration(milliseconds: 100));
-        loadingDialogShown = false;
+      // 로딩 다이얼로그가 표시되지 않은 경우에도 처리
+      if (rootContext.mounted) {
+        // 로딩 다이얼로그가 표시된 경우 닫기
+        if (loadingDialogShown || NoteCreationLoader.isVisible) {
+          NoteCreationLoader.hide(rootContext);
+          await Future.delayed(const Duration(milliseconds: 100));
+        }
+        
+        // 구체적인 에러 메시지 표시
+        ErrorHandler.showErrorSnackBar(rootContext, errorMessage);
       }
+      return; // 에러 시 바로 종료
     }
 
     // 5. 결과 처리 (성공/실패 모두 처리)
