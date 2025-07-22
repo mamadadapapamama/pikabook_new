@@ -18,6 +18,9 @@ import '../../sample/sample_tts_service.dart';
 import '../../../core/widgets/dot_loading_indicator.dart';
 import '../../../core/utils/error_handler.dart';
 import '../../../core/services/subscription/unified_subscription_manager.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../../core/constants/feature_flags.dart';
+import '../../../core/utils/snackbar_helper.dart';
 
 /// ProcessedTextWidget은 처리된 텍스트(중국어 원문, 병음, 번역)를 표시하는 위젯입니다.
 
@@ -193,18 +196,14 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
       
       if (limitStatus['ttsLimitReached'] == true) {
         if (mounted) {
-          // TTS 한도 도달 시 업그레이드 모달 표시
-        final subscriptionState = await UnifiedSubscriptionManager().getSubscriptionState();
-        final modalType = subscriptionState.hasUsedTrial 
-            ? UpgradeModalType.premiumOffer 
-            : UpgradeModalType.trialOffer;
-        
-        showModalBottomSheet(
-          context: context,
-          isScrollControlled: true,
-          backgroundColor: Colors.transparent,
-          builder: (context) => SimpleUpgradeModal(type: modalType),
-        );
+          // 🎯 Feature Flag에 따라 처리 방식 결정
+          if (FeatureFlags.MANUAL_UPGRADE_REQUEST_ENABLED) {
+            // 수동 업그레이드 폼으로 연결
+            _showManualUpgradeDialog();
+          } else {
+            // 기존 업그레이드 모달 (비활성화됨)
+            SnackbarHelper.showError('TTS 사용량이 한도에 도달했습니다.');
+          }
         }
         return;
       }
@@ -562,5 +561,41 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
         ],
       ),
     );
+  }
+
+  /// 🎯 수동 업그레이드 다이얼로그 표시
+  void _showManualUpgradeDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('TTS 사용량 한도 도달'),
+        content: const Text(ManualUpgradeConstants.MANUAL_UPGRADE_MESSAGE),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('취소'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              _openManualUpgradeForm();
+            },
+            child: const Text(ManualUpgradeConstants.MANUAL_UPGRADE_BUTTON_TEXT),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 🎯 수동 업그레이드 폼 열기
+  void _openManualUpgradeForm() async {
+    final url = Uri.parse(ManualUpgradeConstants.MANUAL_UPGRADE_FORM_URL);
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    } else {
+      if (mounted) {
+        SnackbarHelper.showError('수동 업그레이드 폼을 열 수 없습니다.');
+      }
+    }
   }
 }

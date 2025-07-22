@@ -23,6 +23,7 @@ import '../../core/widgets/selection_dialog.dart';
 import '../../core/services/payment/in_app_purchase_service.dart';
 import '../../core/models/subscription_state.dart';
 import '../../core/services/notification/notification_service.dart';
+import '../../core/constants/feature_flags.dart';
 
 class SettingsScreen extends StatefulWidget {
   final VoidCallback onLogout;
@@ -97,20 +98,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final String? photoUrl = viewModel.currentUser?.photoURL;
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 24.0),
+      padding: const EdgeInsets.all(SpacingTokens.lg),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SizedBox(height: 32),
-          
-          _buildSectionTitle('프로필'),
-          const SizedBox(height: 12),
+          // 프로필 카드
           ProfileCard(
             displayName: displayName,
             email: email,
             photoUrl: photoUrl,
           ),
           
+          const SizedBox(height: SpacingTokens.lg),
+          
+          // 🎯 Feature Flag에 따라 플랜 카드 표시 여부 결정
+          if (FeatureFlags.PLAN_CARD_ENABLED) ...[
+            const PlanCard(),
+            const SizedBox(height: SpacingTokens.lg),
+          ],
+
           const SizedBox(height: 16),
           
           Padding(
@@ -125,12 +131,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               isFullWidth: true,
             ),
           ),
-          
-          const SizedBox(height: 32),
-          
-                      _buildSectionTitle('내 플랜'),
-            const SizedBox(height: 12),
-          const PlanCard(), // 분리된 PlanCard 위젯 사용
           
           const SizedBox(height: 32),
           

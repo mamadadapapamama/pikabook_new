@@ -13,6 +13,7 @@ import '../../core/widgets/pika_app_bar.dart';
 import '../../core/widgets/dot_loading_indicator.dart';
 import '../../core/models/banner_type.dart';
 import '../../core/widgets/simple_upgrade_modal.dart'; // 🎯 SimpleUpgradeModal 추가
+import '../../core/constants/feature_flags.dart';
 
 // 🎯 Feature imports
 import 'home_viewmodel.dart';
@@ -183,7 +184,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   /// 🎉 환영 모달 표시
   void _showWelcomeModal() {
     if (kDebugMode) {
-      debugPrint('🎉 [HomeScreen] 환영 모달 표시');
+      debugPrint('🎉 [HomeScreen] 환영 모달 표시 시도');
+    }
+
+    // 🎯 Feature Flag 체크
+    if (!FeatureFlags.WELCOME_MODAL_ENABLED) {
+      if (kDebugMode) {
+        debugPrint('🚫 [HomeScreen] 환영 모달 비활성화됨 - 바로 완료 처리');
+      }
+      _completeWelcomeModal();
+      return;
     }
 
     showModalBottomSheet(
@@ -218,6 +228,34 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         }
       }
     });
+  }
+
+  /// 🎯 환영 모달 완료 처리 (Feature Flag 비활성화 시 사용)
+  void _completeWelcomeModal() async {
+    if (kDebugMode) {
+      debugPrint('✅ [HomeScreen] 환영 모달 완료 (Feature Flag로 스킵됨)');
+    }
+    
+    // 🎯 환영 모달 완료 기록을 Firestore에 저장
+    try {
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser != null) {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(currentUser.uid)
+            .set({
+          'hasSeenWelcomeModal': true,
+        }, SetOptions(merge: true));
+        
+        if (kDebugMode) {
+          debugPrint('✅ [HomeScreen] 환영 모달 완료 기록 저장 완료 (스킵됨)');
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ [HomeScreen] 환영 모달 완료 기록 저장 실패: $e');
+      }
+    }
   }
 
   /// 🎯 기본 상태 설정
@@ -325,64 +363,44 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               debugPrint('   - 변환된 BannerType 목록: ${convertedBanners.map((e) => e.name).toList()}');
             }
 
+            // 🎯 Feature Flag에 따라 배너 표시 여부 결정
             return FutureBuilder<List<Widget>>(
-              future: (() async {
-                try {
-                  if (kDebugMode) {
-                    debugPrint('🔧 [HomeScreen] buildActiveBanners 호출 시작');
-                    debugPrint('   - 전달할 배너: ${convertedBanners.map((e) => e.name).toList()}');
-                  }
-                  
-                  final result = await _uiCoordinator.buildActiveBanners(
-                    context: context,
-                    activeBanners: convertedBanners,
-                    onShowUpgradeModal: _onShowUpgradeModal,
-                    onDismissBanner: _onDismissBanner,
-                  );
-                  
-                  if (kDebugMode) {
-                    debugPrint('🔧 [HomeScreen] buildActiveBanners 호출 완료');
-                    debugPrint('   - 반환된 위젯 수: ${result.length}');
-                  }
-                  
-                  return result;
-                } catch (e, stackTrace) {
-                  if (kDebugMode) {
-                    debugPrint('❌ [HomeScreen] buildActiveBanners 에러: $e');
-                    debugPrint('Stack trace: $stackTrace');
-                  }
-                  return <Widget>[]; // 에러 시 빈 리스트 반환
-                }
-              })(),
-              builder: (context, snapshot) {
+              future: FeatureFlags.SUBSCRIPTION_BANNERS_ENABLED 
+                  ? _uiCoordinator.buildActiveBanners(
+                      context: context,
+                      activeBanners: convertedBanners,
+                      onShowUpgradeModal: _onShowUpgradeModal,
+                      onDismissBanner: _onDismissBanner,
+                    )
+                  : Future.value(<Widget>[]), // 빈 배너 리스트 반환
+              builder: (context, bannerSnapshot) {
                 if (kDebugMode) {
                   debugPrint('🏠 [HomeScreen] FutureBuilder 결과:');
-                  debugPrint('   - FutureBuilder 상태: ${snapshot.connectionState}');
-                  debugPrint('   - 에러: ${snapshot.error}');
-                  debugPrint('   - 데이터 있음: ${snapshot.hasData}');
-                }
-                
-                final activeBanners = snapshot.data ?? [];
-                
-                if (kDebugMode) {
-                  debugPrint('   - 최종 표시될 배너 위젯 수: ${activeBanners.length}');
-                  if (activeBanners.isEmpty) {
-                    debugPrint('   - ⚠️ 배너 위젯이 없는 이유를 확인 필요!');
-                  } else {
-                    debugPrint('   - ✅ 배너 위젯들: ${activeBanners.map((w) => w.runtimeType.toString()).toList()}');
+                  debugPrint('   - connectionState: ${bannerSnapshot.connectionState}');
+                  debugPrint('   - hasData: ${bannerSnapshot.hasData}');
+                  debugPrint('   - 배너 위젯 수: ${bannerSnapshot.data?.length ?? 0}');
+                  if (bannerSnapshot.hasError) {
+                    debugPrint('   - 에러: ${bannerSnapshot.error}');
                   }
                 }
+
+                final bannerWidgets = bannerSnapshot.data ?? <Widget>[];
+
+                // 🎯 Feature Flag에 따라 배너 필터링
+                final filteredBanners = FeatureFlags.SUBSCRIPTION_BANNERS_ENABLED 
+                    ? bannerWidgets 
+                    : <Widget>[];
 
                 if (hasNotes) {
                   // 노트가 있는 경우 - 노트 리스트 표시
                   return HomeNotesList(
-                    activeBanners: activeBanners,
+                    activeBanners: filteredBanners,
                     onRefresh: _onRefresh,
                   );
                 } else {
                   // 노트가 없는 경우 - 제로 상태 표시
                   return HomeZeroState(
-                    activeBanners: activeBanners,
+                    activeBanners: filteredBanners,
                   );
                 }
               },

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme/tokens/typography_tokens.dart';
 import '../../core/theme/tokens/color_tokens.dart';
@@ -7,9 +8,9 @@ import '../../core/services/tts/unified_tts_service.dart';
 import '../../core/services/authentication/auth_service.dart';
 import '../sample/sample_tts_service.dart';
 import '../../core/services/common/usage_limit_service.dart';
-
 import '../../core/services/subscription/unified_subscription_manager.dart';
-import '../../core/widgets/simple_upgrade_modal.dart';
+import '../../core/constants/feature_flags.dart';
+import '../../core/utils/snackbar_helper.dart';
 
 /// 통합 TTS 전체 재생 버튼
 class UnifiedTtsPlayAllButton extends StatefulWidget {
@@ -74,18 +75,14 @@ class _UnifiedTtsPlayAllButtonState extends State<UnifiedTtsPlayAllButton> {
     
     if (limitStatus['ttsLimitReached'] == true) {
       if (mounted) {
-        // TTS 한도 도달 시 업그레이드 모달 표시
-        final subscriptionState = await UnifiedSubscriptionManager().getSubscriptionState();
-        final modalType = subscriptionState.hasUsedTrial 
-            ? UpgradeModalType.premiumOffer 
-            : UpgradeModalType.trialOffer;
-        
-        showModalBottomSheet(
-          context: context,
-          isScrollControlled: true,
-          backgroundColor: Colors.transparent,
-          builder: (context) => SimpleUpgradeModal(type: modalType),
-        );
+        // 🎯 Feature Flag에 따라 처리 방식 결정
+        if (FeatureFlags.MANUAL_UPGRADE_REQUEST_ENABLED) {
+          // 수동 업그레이드 폼으로 연결
+          _showManualUpgradeDialog();
+        } else {
+          // 기존 업그레이드 모달 (비활성화됨)
+          SnackbarHelper.showError('TTS 사용량이 한도에 도달했습니다.');
+        }
       }
       return;
     }
@@ -136,6 +133,42 @@ class _UnifiedTtsPlayAllButtonState extends State<UnifiedTtsPlayAllButton> {
     
     if (kDebugMode) {
       debugPrint('📢 샘플 모드에서 전체 듣기 TTS 기능 제한됨');
+    }
+  }
+  
+  /// 🎯 수동 업그레이드 다이얼로그 표시
+  void _showManualUpgradeDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('TTS 사용량 한도 도달'),
+        content: const Text(ManualUpgradeConstants.MANUAL_UPGRADE_MESSAGE),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('취소'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              _openManualUpgradeForm();
+            },
+            child: const Text(ManualUpgradeConstants.MANUAL_UPGRADE_BUTTON_TEXT),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 🎯 수동 업그레이드 폼 열기
+  void _openManualUpgradeForm() async {
+    final url = Uri.parse(ManualUpgradeConstants.MANUAL_UPGRADE_FORM_URL);
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    } else {
+      if (mounted) {
+        SnackbarHelper.showError('수동 업그레이드 폼을 열 수 없습니다.');
+      }
     }
   }
   

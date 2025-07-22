@@ -21,6 +21,7 @@ import 'core/services/authentication/auth_service.dart';
 import 'core/services/authentication/user_account_service.dart';
 import 'core/services/subscription/unified_subscription_manager.dart';
 import 'core/models/subscription_state.dart';
+import 'core/constants/feature_flags.dart';
 
 import 'package:cloud_firestore/cloud_firestore.dart'; // FirebaseFirestore 추가
 
@@ -103,11 +104,10 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     _authStateSubscription?.cancel();
     _subscriptionStateSubscription?.cancel(); // ✅ 구독 상태 스트림 구독 취소
     
-    // InAppPurchaseService는 싱글톤이므로 앱 종료 시에만 dispose
-    if (_purchaseService.isAvailable) {
+    // 🎯 Feature Flag에 따라 InAppPurchase 서비스 dispose 결정
+    if (FeatureFlags.IN_APP_PURCHASE_ENABLED && _purchaseService.isAvailable) {
       _purchaseService.dispose();
     }
-    
 
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
