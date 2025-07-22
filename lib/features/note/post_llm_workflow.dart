@@ -503,12 +503,48 @@ class PostLLMWorkflow {
         onRetry: () => retryLlmProcessing(noteId),
       );
       
+      // 🎯 각 페이지에도 타임아웃 에러 상태 기록
+      _updateAllPagesWithTimeoutError(noteId);
+      
       if (kDebugMode) {
         debugPrint('🚨 [워크플로우] UI에 LLM 타임아웃 에러 등록: $noteId');
       }
     } catch (e) {
       if (kDebugMode) {
         debugPrint('❌ UI 타임아웃 에러 등록 실패: $e');
+      }
+    }
+  }
+
+  /// 🎯 모든 페이지에 타임아웃 에러 상태 기록
+  Future<void> _updateAllPagesWithTimeoutError(String noteId) async {
+    try {
+      // 해당 노트의 모든 페이지 조회
+      final pagesQuery = await _firestore
+          .collection('pages')
+          .where('noteId', isEqualTo: noteId)
+          .get();
+      
+      // 각 페이지에 타임아웃 에러 기록
+      final batch = _firestore.batch();
+      for (final pageDoc in pagesQuery.docs) {
+        batch.update(pageDoc.reference, {
+          'status': ProcessingStatus.failed.toString(),
+          'errorMessage': '현재 노트 처리가 되지 않고 있습니다. 잠시 후에 다시 시도해 주세요.',
+          'errorOccurredAt': FieldValue.serverTimestamp(),
+          'errorType': 'llm_timeout',
+        });
+      }
+      
+      await batch.commit();
+      
+      if (kDebugMode) {
+        debugPrint('🚨 [워크플로우] ${pagesQuery.docs.length}개 페이지에 타임아웃 에러 기록 완료: $noteId');
+      }
+      
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ 페이지별 타임아웃 에러 기록 실패: $e');
       }
     }
   }
