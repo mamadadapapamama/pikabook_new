@@ -37,8 +37,8 @@ class FeatureFlags {
   /// 홈 화면 구독 관련 배너 표시 여부 (현재 비활성화)
   static const bool SUBSCRIPTION_BANNERS_ENABLED = false;
   
-  /// 환영 모달 (온보딩 후 구독 유도) 표시 여부 (현재 비활성화)
-  static const bool WELCOME_MODAL_ENABLED = false;
+  /// 환영 모달 (온보딩 후 웰컴 메시지) 표시 여부 (활성화)
+  static const bool WELCOME_MODAL_ENABLED = true;
   
   /// 사용량 한도 도달 시 수동 업그레이드 폼으로 연결 여부 (활성화)
   static const bool MANUAL_UPGRADE_REQUEST_ENABLED = true;

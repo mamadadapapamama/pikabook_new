@@ -265,6 +265,9 @@ class UserPreferencesService {
         
         if (kDebugMode) {
           debugPrint('✅ [UserPreferences] Firestore 설정 로드 완료 (캐시 없이 직접 저장)');
+          debugPrint('   사용자 이름: ${preferences.userName}');
+          debugPrint('   노트스페이스: ${preferences.defaultNoteSpace}');
+          debugPrint('   온보딩 완료: ${preferences.onboardingCompleted}');
         }
       } else {
         if (kDebugMode) {
@@ -357,7 +360,17 @@ class UserPreferencesService {
   /// 기본 노트스페이스 설정
   Future<void> setDefaultNoteSpace(String spaceId) async {
     final prefs = await getPreferences();
-    await savePreferences(prefs.copyWith(defaultNoteSpace: spaceId));
+    final spaces = List<String>.from(prefs.noteSpaces);
+    
+    // 기본 노트스페이스가 목록에 없으면 추가
+    if (!spaces.contains(spaceId)) {
+      spaces.add(spaceId);
+    }
+    
+    await savePreferences(prefs.copyWith(
+      defaultNoteSpace: spaceId,
+      noteSpaces: spaces,
+    ));
   }
   
   /// 노트스페이스 이름 변경

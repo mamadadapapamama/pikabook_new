@@ -91,6 +91,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
   }
+ // 섹션 제목 위젯
+  Widget _buildSectionTitle(String title) {
+    return Text(
+      title,
+      style: TypographyTokens.button.copyWith(
+        color: ColorTokens.textSecondary,
+      ),
+    );
+  }
 
   Widget _buildProfileContent(BuildContext context, SettingsViewModel viewModel) {
     final String displayName = viewModel.currentUser?.displayName ?? '사용자';
@@ -102,6 +111,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // 내 계정 섹션
+          _buildSectionTitle('내 계정'),
+          const SizedBox(height: 12),
+          
           // 프로필 카드
           ProfileCard(
             displayName: displayName,
@@ -109,15 +122,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
             photoUrl: photoUrl,
           ),
           
-          const SizedBox(height: SpacingTokens.lg),
-          
+          const SizedBox(height: 8),
+       
           // 🎯 Feature Flag에 따라 플랜 카드 표시 여부 결정
           if (FeatureFlags.PLAN_CARD_ENABLED) ...[
             const PlanCard(),
-            const SizedBox(height: SpacingTokens.lg),
+            const SizedBox(height: SpacingTokens.sm),
           ],
-
-          const SizedBox(height: 16),
           
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 8),
@@ -132,7 +143,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           
-          const SizedBox(height: 32),
+          const SizedBox(height: SpacingTokens.lg),
           
           _buildSectionTitle('노트 설정'),
           const SizedBox(height: 12),
@@ -175,7 +186,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onTap: () => _showTextProcessingModeDialog(context, viewModel),
           ),
           
-          const SizedBox(height: 32),
+          const SizedBox(height: SpacingTokens.lg),
           
           _buildSectionTitle('계정관리'),
           const SizedBox(height: 12),
@@ -194,16 +205,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           
 
         ],
-      ),
-    );
-  }
-  
-  // 섹션 제목 위젯
-  Widget _buildSectionTitle(String title) {
-    return Text(
-      title,
-      style: TypographyTokens.button.copyWith(
-        color: ColorTokens.textSecondary,
       ),
     );
   }

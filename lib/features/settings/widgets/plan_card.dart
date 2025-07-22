@@ -22,7 +22,7 @@ class PlanCard extends StatelessWidget {
         width: double.infinity,
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(4),
+          borderRadius: BorderRadius.circular(8),
         ),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         child: Column(
@@ -115,29 +115,34 @@ class PlanCard extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // 타이틀을 "내 플랜"으로 고정
+        Text(
+          '내 플랜',
+          style: TypographyTokens.caption.copyWith(
+            color: ColorTokens.textSecondary,
+          ),
+        ),
+        const SizedBox(height: SpacingTokens.xs),
+        // 플랜 이름, 새로고침 버튼, 사용량 조회 버튼을 같은 줄에 배치
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Flexible(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // 타이틀을 "내 플랜"으로 고정
-                  Text(
-                    '내 플랜',
-                    style: TypographyTokens.button.copyWith(
-                      color: ColorTokens.textPrimary
-                    ) ,
-                    overflow: TextOverflow.ellipsis,
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  subscriptionInfo.planTitle, 
+                  style: TypographyTokens.subtitle2.copyWith(
+                    fontWeight: FontWeight.w600,
                   ),
-                  const SizedBox(width: SpacingTokens.xs),
-                  InkWell(
-                    onTap: viewModel.isLoading ? null : () => viewModel.refreshPlanInfo(force: true),
-                    child: const Icon(Icons.refresh, size: 18, color: ColorTokens.textSecondary),
-                  ),
-                ],
-              ),
+                ),
+                const SizedBox(width: SpacingTokens.xs),
+                InkWell(
+                  onTap: viewModel.isLoading ? null : () => viewModel.refreshPlanInfo(force: true),
+                  child: const Icon(Icons.refresh, size: 18, color: ColorTokens.textSecondary),
+                ),
+              ],
             ),
             PikaButton(
               text: '사용량 조회',
@@ -146,12 +151,6 @@ class PlanCard extends StatelessWidget {
               onPressed: () => viewModel.showUsageDialog(context),
             )
           ],
-        ),
-        const SizedBox(height: SpacingTokens.xs),
-        // 플랜 이름을 작은 텍스트로 표시 (16 bold)
-        Text(
-          subscriptionInfo.planTitle, 
-          style: TypographyTokens.subtitle2,
         ),
         if (subscriptionInfo.dateInfoText != null) ...[
           const SizedBox(height: SpacingTokens.xsHalf),
@@ -196,7 +195,7 @@ class SkeletonBox extends StatelessWidget {
       height: height,
       decoration: BoxDecoration(
         color: ColorTokens.greyLight,
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: BorderRadius.circular(8),
       ),
     );
   }

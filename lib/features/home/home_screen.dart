@@ -12,7 +12,7 @@ import '../../core/theme/tokens/ui_tokens.dart';
 import '../../core/widgets/pika_app_bar.dart';
 import '../../core/widgets/dot_loading_indicator.dart';
 import '../../core/models/banner_type.dart';
-import '../../core/widgets/simple_upgrade_modal.dart'; // 🎯 SimpleUpgradeModal 추가
+import '../../core/widgets/welcome_modal.dart'; // 🎯 WelcomeModal 추가
 import '../../core/constants/feature_flags.dart';
 
 // 🎯 Feature imports
@@ -196,13 +196,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       return;
     }
 
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      isDismissible: false, // 온보딩 후에는 반드시 선택하도록
-      builder: (context) => SimpleUpgradeModal(type: UpgradeModalType.trialOffer),
-    ).then((result) async {
+    WelcomeModal.show(context).then((result) async {
       if (kDebugMode) {
         debugPrint('✅ [HomeScreen] 환영 모달 완료');
       }

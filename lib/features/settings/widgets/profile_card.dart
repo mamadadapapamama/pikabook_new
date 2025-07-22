@@ -19,7 +19,7 @@ class ProfileCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(SpacingTokens.sm),
+      padding: const EdgeInsets.all(SpacingTokens.md),
       decoration: BoxDecoration(
         color: ColorTokens.surface,
         borderRadius: BorderRadius.circular(SpacingTokens.radiusXs),
@@ -28,12 +28,12 @@ class ProfileCard extends StatelessWidget {
         children: [
           // 프로필 이미지
           CircleAvatar(
-            radius: SpacingTokens.iconSizeMedium,
+            radius: SpacingTokens.iconSizeSmall,
             backgroundColor: ColorTokens.greyLight,
             backgroundImage: photoUrl != null ? NetworkImage(photoUrl!) : null,
             child: photoUrl == null
                 ? const Icon(Icons.person, 
-                    size: SpacingTokens.iconSizeMedium, 
+                    size: SpacingTokens.iconSizeSmall, 
                     color: ColorTokens.greyMedium)
                 : null,
           ),

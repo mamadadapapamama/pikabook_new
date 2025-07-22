@@ -260,6 +260,16 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         
         // 🎯 온보딩 완료 플래그만 SharedPreferences에 저장 (캐시 시스템 우회)
         await _userPreferences.setOnboardingCompletedDirect(true);
+        
+        // 🎯 기본 사용자 이름과 노트스페이스 이름도 SharedPreferences에 저장
+        await _userPreferences.setUserName(defaultName);
+        await _userPreferences.setDefaultNoteSpace(defaultNoteSpace);
+        
+        if (kDebugMode) {
+          print('✅ [온보딩 건너뛰기] 기본 사용자 정보 저장 완료');
+          print('   사용자 이름: $defaultName');
+          print('   노트스페이스: $defaultNoteSpace');
+        }
       }
       
       // Skip한 경우 바로 홈으로 이동 (환영 모달 표시하지 않음)
@@ -313,7 +323,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           break;
         }
       }
-      String translationMode = selectedLevelValue == '초급' ? 'segment' : 'full';
+      String translationMode = selectedLevelValue == '초급' ? 'segment' : 'paragraph';
 
       // 🎯 온보딩 데이터는 Firebase에 직접 저장 (캐시 사용 안 함)
       await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
@@ -339,9 +349,15 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       // 🎯 온보딩 완료 플래그만 SharedPreferences에 저장 (캐시 시스템 우회)
       await _userPreferences.setCurrentUserId(user.uid);
       await _userPreferences.setOnboardingCompletedDirect(true);
+      
+      // 🎯 사용자 이름과 노트스페이스 이름도 SharedPreferences에 저장
+      await _userPreferences.setUserName(_nameController.text);
+      await _userPreferences.setDefaultNoteSpace('${_nameController.text}의 학습노트');
 
       if (kDebugMode) {
         print('✅ [온보딩] 사용자 정보 저장 완료 - 홈으로 이동');
+        print('   사용자 이름: ${_nameController.text}');
+        print('   노트스페이스: ${_nameController.text}의 학습노트');
       }
 
       if (mounted) {
