@@ -7,8 +7,8 @@ class PlanConstants {
   // 플랜별 제한값
   static const Map<String, Map<String, int>> PLAN_LIMITS = {
     PLAN_FREE: {
-      'ocrPages': 10,          // 월 10장 (업로드 이미지 수)
-      'ttsRequests': 30,       // 월 30회 (듣기 기능)
+      'ocrPages': 30,          // 월 30장 (업로드 이미지 수)
+      'ttsRequests': 50,       // 월 50회 (듣기 기능)
     },
     PLAN_PREMIUM: {
       'ocrPages': 300,         // 월 300장 (업로드 이미지 수)

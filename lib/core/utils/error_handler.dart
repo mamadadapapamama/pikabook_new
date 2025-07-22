@@ -77,6 +77,15 @@ class ErrorHandler {
     final errorType = analyzeError(error);
     final message = getErrorMessage(errorType, context);
     
+    // "일시적인 문제가 발생했어요" 메시지인 경우 다시시도 버튼 제거
+    VoidCallback? finalOnRetry = onRetry;
+    String? finalRetryButtonText = retryButtonText;
+    
+    if (message.contains('일시적인 문제가 발생했어요')) {
+      finalOnRetry = null;
+      finalRetryButtonText = null;
+    }
+    
     // 에러 타입별 기본 UI 설정
     Color? defaultMessageColor;
     IconData? defaultIcon;
@@ -107,10 +116,10 @@ class ErrorHandler {
       messageColor: messageColor ?? defaultMessageColor,
       icon: icon ?? defaultIcon,
       iconColor: iconColor ?? defaultIconColor,
-      retryButtonText: retryButtonText,
+      retryButtonText: finalRetryButtonText,
     );
     
-    _retryCallbacks[id] = onRetry;
+    _retryCallbacks[id] = finalOnRetry;
     
     if (kDebugMode) {
       debugPrint('🚨 [ErrorHandler] 에러 등록: $id - $message');

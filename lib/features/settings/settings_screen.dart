@@ -192,48 +192,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           
           const SizedBox(height: 32),
           
-          if (kDebugMode) ...[
-            _buildSectionTitle('디버그 메뉴'),
-            const SizedBox(height: 12),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 8),
-              child: PikaButton(
-                text: '미완료 거래 정리',
-                variant: PikaButtonVariant.warning,
-                onPressed: () async {
-                  await InAppPurchaseService().clearPendingTransactions();
-                  if (!context.mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('미완료 거래 정리가 완료되었습니다.'),
-                      backgroundColor: Colors.green,
-                    ),
-                  );
-                },
-                isFullWidth: true,
-              ),
-            ),
-            const SizedBox(height: 32),
-            // 🧪 디버그 모드에서만 표시되는 알림 테스트 버튼
-            if (kDebugMode) ...[
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () async {
-                  final notificationService = NotificationService();
-                  
-                  // 1. 시스템 상태 전체 확인
-                  await notificationService.checkNotificationSystemStatus();
-                  
-                  // 2. 즉시 테스트 알림
-                  await notificationService.showTestNotification();
-                  
-                  // 3. 예약된 알림 확인
-                  await notificationService.getPendingNotifications();
-                },
-                child: const Text('🧪 알림 시스템 테스트'),
-              ),
-            ],
-          ],
+
         ],
       ),
     );

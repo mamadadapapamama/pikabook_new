@@ -35,14 +35,62 @@ class PlanCard extends StatelessWidget {
             
             if (viewModel.isPlanLoaded && subscriptionInfo != null) ...[
               const SizedBox(height: SpacingTokens.md),
-              PikaButton(
-                text: subscriptionInfo.ctaText,
-                variant: subscriptionInfo.entitlement == Entitlement.free ? PikaButtonVariant.primary : PikaButtonVariant.outline,
-                size: PikaButtonSize.small,
-                onPressed: subscriptionInfo.entitlement == Entitlement.premium 
-                    ? null // 🎯 프리미엄 상태일 때는 버튼 비활성화
-                    : () => viewModel.handleCTAAction(context),
-                isFullWidth: true,
+              Container(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: subscriptionInfo.entitlement == Entitlement.premium 
+                      ? null // 🎯 프리미엄 상태일 때는 버튼 비활성화
+                      : () => viewModel.handleCTAAction(context),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: subscriptionInfo.entitlement == Entitlement.free 
+                        ? ColorTokens.primary 
+                        : Colors.transparent,
+                    foregroundColor: subscriptionInfo.entitlement == Entitlement.free 
+                        ? Colors.white 
+                        : ColorTokens.primary,
+                    side: subscriptionInfo.entitlement == Entitlement.free 
+                        ? null 
+                        : BorderSide(color: ColorTokens.primary),
+                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: subscriptionInfo.entitlement == Entitlement.free 
+                      ? Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              '사용량 증가가 필요하시면',
+                              style: TypographyTokens.caption.copyWith(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w400,
+                                color: Colors.white.withOpacity(0.8),
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              subscriptionInfo.ctaText,
+                              style: TypographyTokens.button.copyWith(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w400,
+                                color: Colors.white,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        )
+                      : Text(
+                          subscriptionInfo.ctaText,
+                          style: TypographyTokens.button.copyWith(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: ColorTokens.primary,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                ),
               ),
               if (subscriptionInfo.ctaSubtext != null) ...[
                 const SizedBox(height: SpacingTokens.xs),
@@ -75,12 +123,13 @@ class PlanCard extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Flexible(
-                    child: Text(
-                      subscriptionInfo.planTitle, 
-                      style: TypographyTokens.subtitle1.copyWith(fontWeight: FontWeight.bold),
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                  // 타이틀을 "내 플랜"으로 고정
+                  Text(
+                    '내 플랜',
+                    style: TypographyTokens.button.copyWith(
+                      color: ColorTokens.textPrimary
+                    ) ,
+                    overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(width: SpacingTokens.xs),
                   InkWell(
@@ -92,11 +141,17 @@ class PlanCard extends StatelessWidget {
             ),
             PikaButton(
               text: '사용량 조회',
-              variant: PikaButtonVariant.primary,
-              size: PikaButtonSize.small,
+              variant: PikaButtonVariant.outline,
+              size: PikaButtonSize.xs,
               onPressed: () => viewModel.showUsageDialog(context),
             )
           ],
+        ),
+        const SizedBox(height: SpacingTokens.xs),
+        // 플랜 이름을 작은 텍스트로 표시 (16 bold)
+        Text(
+          subscriptionInfo.planTitle, 
+          style: TypographyTokens.subtitle2,
         ),
         if (subscriptionInfo.dateInfoText != null) ...[
           const SizedBox(height: SpacingTokens.xsHalf),

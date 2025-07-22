@@ -1,6 +1,9 @@
+import 'feature_flags.dart';
+
 /// 🎯 구독 관련 모든 상수 및 텍스트 중앙 관리
 /// 
 /// 이 파일에서 모든 구독 상태, 배너 텍스트, UI 표시 텍스트를 관리합니다.
+/// Feature Flag를 통해 비활성화된 기능들은 제외됩니다.
 /// 
 class SubscriptionConstants {
   
@@ -32,12 +35,27 @@ class SubscriptionConstants {
   // 📱 플랜 표시 텍스트
   // ────────────────────────────────────────────────────────────────────────
   
-  /// 플랜 이름 (UI 표시용)
-  static const Map<String, String> PLAN_DISPLAY_NAMES = {
-    'free': '무료',
-    'premium_monthly': '프리미엄 (월간)',
-    'premium_yearly': '프리미엄 (연간)',
-  };
+  /// 플랜 이름 (UI 표시용) - Feature Flag 적용
+  static Map<String, String> get PLAN_DISPLAY_NAMES {
+    final Map<String, String> plans = {
+      'free': '무료',
+    };
+    
+    // 일회성 프리미엄이 활성화된 경우
+    if (FeatureFlags.isOneTimePremiumEnabled) {
+      plans['premium'] = '프리미엄';
+    }
+    
+    // 구독 플랜이 활성화된 경우만 추가 (현재 비활성화)
+    if (FeatureFlags.isSubscriptionEnabled) {
+      plans.addAll({
+        'premium_monthly': '프리미엄 (월간)',
+        'premium_yearly': '프리미엄 (연간)',
+      });
+    }
+    
+    return plans;
+  }
   
   /// 플랜 상태 표시 텍스트
   static const Map<String, String> PLAN_STATUS_DISPLAY = {
@@ -52,112 +70,171 @@ class SubscriptionConstants {
   // 🎯 배너 텍스트 (BannerType별)
   // ────────────────────────────────────────────────────────────────────────
   
-  static const Map<String, Map<String, String?>> BANNER_TEXTS = {
-    'free': {
-      'title': '🎯 무료 플랜 이용 중',
-      'subtitle': '더 많은 기능을 사용해보세요!',
-      'buttonText': '모든 플랜 보기',
-    },
-    'trialStarted': {
-      'title': '🎉 7일 무료체험 시작!',
-      'subtitle': '프리미엄 기능을 마음껏 사용해보세요',
-      'buttonText': null, // 닫기만 가능
-    },
-    'premiumStarted': {
-      'title': '🎉 프리미엄 구독 시작!',
-      'subtitle': '모든 프리미엄 기능을 이용하실 수 있습니다',
-      'buttonText': null, // 닫기만 가능
-    },
-    'trialCancelled': {
-      'title': '📅 무료체험이 취소되었습니다',
-      'subtitle': '언제든지 다시 시작하실 수 있어요',
-      'buttonText': '모든 플랜 보기',
-    },
-    'premiumCancelled': {
-      'title': '📅 프리미엄 구독이 취소되었습니다',
-      'subtitle': '구독 기간이 끝날 때까지 계속 이용 가능합니다',
-      'buttonText': '앱스토어에서 관리하기',
-    },
-    'switchToPremium': {
-      'title': '💎 프리미엄 월 구독으로 전환되었습니다.',
-      'subtitle': '7일 무료 체험이 끝났습니다. 프리미엄 기능을 마음껏 사용해보세요.',
-      'buttonText': null,
-    },
-    'premiumGrace': {
-      'title': '⚠️ 결제 문제가 발생했습니다',
-      'subtitle': '앱스토어에서 결제 정보를 확인해주세요',
-      'buttonText': '앱스토어에서 관리하기',
-    },
-    'usageLimitFree': {
-      'title': '📊 무료 플랜 사용량 한도 도달',
-      'subtitle': '프리미엄으로 업그레이드하여 무제한 이용하세요',
-      'buttonText': '모든 플랜 보기',
-    },
-    'usageLimitPremium': {
-      'title': '📊 프리미엄 사용량 한도 도달',
-      'subtitle': '더 많은 사용량이 필요하시면 문의해주세요',
-      'buttonText': '문의하기',
-    },
-  };
+  static Map<String, Map<String, String?>> get BANNER_TEXTS {
+    final Map<String, Map<String, String?>> banners = {
+      'free': {
+        'title': '🎯 무료 플랜 이용 중',
+        'subtitle': '더 많은 기능을 사용해보세요!',
+        'buttonText': '프리미엄 업그레이드 요청',
+      },
+      'premiumStarted': {
+        'title': '🎉 프리미엄 이용 중!',
+        'subtitle': '모든 프리미엄 기능을 이용하실 수 있습니다',
+        'buttonText': null, // 닫기만 가능
+      },
+      'usageLimitFree': {
+        'title': '📊 무료 플랜 사용량 한도 도달',
+        'subtitle': '프리미엄으로 업그레이드하여 무제한 이용하세요',
+        'buttonText': '프리미엄 업그레이드 요청',
+      },
+      'usageLimitPremium': {
+        'title': '📊 프리미엄 사용량 한도 도달',
+        'subtitle': '더 많은 사용량이 필요하시면 문의해주세요',
+        'buttonText': '문의하기',
+      },
+    };
+    
+    // 트라이얼 기능이 활성화된 경우만 추가 (현재 비활성화)
+    if (FeatureFlags.isTrialEnabled) {
+      banners.addAll({
+        'trialStarted': {
+          'title': '🎉 7일 무료체험 시작!',
+          'subtitle': '프리미엄 기능을 마음껏 사용해보세요',
+          'buttonText': null, // 닫기만 가능
+        },
+        'trialCancelled': {
+          'title': '📅 무료체험이 취소되었습니다',
+          'subtitle': '언제든지 다시 시작하실 수 있어요',
+          'buttonText': '모든 플랜 보기',
+        },
+        'switchToPremium': {
+          'title': '💎 프리미엄 월 구독으로 전환되었습니다.',
+          'subtitle': '7일 무료 체험이 끝났습니다. 프리미엄 기능을 마음껏 사용해보세요.',
+          'buttonText': null,
+        },
+      });
+    }
+    
+    // 구독 기능이 활성화된 경우만 추가 (현재 비활성화)
+    if (FeatureFlags.isSubscriptionEnabled) {
+      banners.addAll({
+        'premiumCancelled': {
+          'title': '📅 프리미엄 구독이 취소되었습니다',
+          'subtitle': '구독 기간이 끝날 때까지 계속 이용 가능합니다',
+          'buttonText': '앱스토어에서 관리하기',
+        },
+        'premiumGrace': {
+          'title': '⚠️ 결제 문제가 발생했습니다',
+          'subtitle': '앱스토어에서 결제 정보를 확인해주세요',
+          'buttonText': '앱스토어에서 관리하기',
+        },
+      });
+    }
+    
+    return banners;
+  }
 
   // ────────────────────────────────────────────────────────────────────────
   // 💬 스낵바/알림 메시지
   // ────────────────────────────────────────────────────────────────────────
   
-  static const Map<String, String> PURCHASE_SUCCESS_MESSAGES = {
-    'premium_monthly': '🎉 프리미엄 월간 구독이 시작되었습니다!',
-    'premium_yearly': '🎉 프리미엄 연간 구독이 시작되었습니다!',
-  };
+  static Map<String, String> get PURCHASE_SUCCESS_MESSAGES {
+    final Map<String, String> messages = {};
+    
+    // 일회성 프리미엄이 활성화된 경우
+    if (FeatureFlags.isOneTimePremiumEnabled) {
+      messages['premium'] = '🎉 프리미엄 업그레이드가 완료되었습니다!';
+    }
+    
+    // 구독 기능이 활성화된 경우만 추가 (현재 비활성화)
+    if (FeatureFlags.isSubscriptionEnabled) {
+      messages.addAll({
+        'premium_monthly': '🎉 프리미엄 월간 구독이 시작되었습니다!',
+        'premium_yearly': '🎉 프리미엄 연간 구독이 시작되었습니다!',
+      });
+    }
+    
+    return messages;
+  }
   
-  static const Map<String, String> TRIAL_MESSAGES = {
-    'started': '🎉 7일 무료체험이 시작되었습니다!',
-    'ending_soon': '📅 무료체험이 내일 종료됩니다',
-    'ended': '📅 무료체험이 종료되고 프리미엄 월 구독으로 전환되었습니다.',
-  };
+  static Map<String, String> get TRIAL_MESSAGES {
+    final Map<String, String> messages = {};
+    
+    // 트라이얼 기능이 활성화된 경우만 추가 (현재 비활성화)
+    if (FeatureFlags.isTrialEnabled) {
+      messages.addAll({
+        'started': '🎉 7일 무료체험이 시작되었습니다!',
+        'ending_soon': '📅 무료체험이 내일 종료됩니다',
+        'ended': '📅 무료체험이 종료되고 프리미엄 월 구독으로 전환되었습니다.',
+      });
+    }
+    
+    return messages;
+  }
 
   // ────────────────────────────────────────────────────────────────────────
   // 🎯 CTA 버튼 텍스트 (상태별) - 수동 업그레이드 시스템용
   // ────────────────────────────────────────────────────────────────────────
   
-  static const Map<String, String> CTA_TEXTS = {
-    'free_active': '수동 업그레이드 요청',
-    'premium_active': '현재 프리미엄 이용 중',
-    'premium_cancelling': '현재 프리미엄 이용 중',
-    'premium_expired': '수동 업그레이드 요청',
-    'trial_active': '현재 프리미엄 이용 중',
-    'trial_cancelling': '현재 프리미엄 이용 중',
-    'trial_expired': '수동 업그레이드 요청',
-  };
+  static Map<String, String> get CTA_TEXTS {
+    final Map<String, String> texts = {
+      'free_active': '프리미엄 업그레이드 요청',
+      'premium_active': '현재 프리미엄 이용 중',
+      'premium_expired': '프리미엄 업그레이드 요청',
+    };
+    
+    // 트라이얼 기능이 활성화된 경우만 추가 (현재 비활성화)
+    if (FeatureFlags.isTrialEnabled) {
+      texts.addAll({
+        'trial_active': '현재 프리미엄 이용 중',
+        'trial_cancelling': '현재 프리미엄 이용 중',
+        'trial_expired': '프리미엄 업그레이드 요청',
+      });
+    }
+    
+    // 구독 기능이 활성화된 경우만 추가 (현재 비활성화)
+    if (FeatureFlags.isSubscriptionEnabled) {
+      texts.addAll({
+        'premium_cancelling': '현재 프리미엄 이용 중',
+      });
+    }
+    
+    return texts;
+  }
 
   // ────────────────────────────────────────────────────────────────────────
   // 🔧 헬퍼 함수들
   // ────────────────────────────────────────────────────────────────────────
   
-  /// Entitlement + Status 조합으로 배너 타입 결정
+  /// Entitlement + Status 조합으로 배너 타입 결정 (Feature Flag 적용)
   static String? getBannerType(String entitlement, int subscriptionStatus) {
     // 기본 entitlement 배너
     switch (entitlement.toUpperCase()) {
       case 'FREE':
         return 'free';
       case 'TRIAL':
-        return 'trialStarted';
+        // 트라이얼 기능이 비활성화된 경우 무료로 처리
+        return FeatureFlags.isTrialEnabled ? 'trialStarted' : 'free';
       case 'PREMIUM':
         return 'premiumStarted';
     }
     
-    // 상태 기반 추가 배너
-    if (subscriptionStatus == STATUS_CANCELLED) {
-      if (entitlement.toUpperCase() == 'PREMIUM') {
-        return 'premiumCancelled';
-      } else if (entitlement.toUpperCase() == 'TRIAL') {
-        return 'trialCancelled';
+    // 상태 기반 추가 배너 (구독 기능이 활성화된 경우만)
+    if (FeatureFlags.isSubscriptionEnabled) {
+      if (subscriptionStatus == STATUS_CANCELLED) {
+        if (entitlement.toUpperCase() == 'PREMIUM') {
+          return 'premiumCancelled';
+        } else if (entitlement.toUpperCase() == 'TRIAL' && FeatureFlags.isTrialEnabled) {
+          return 'trialCancelled';
+        }
+      } else if (subscriptionStatus == STATUS_EXPIRED) {
+        if ((entitlement.toUpperCase() == 'PREMIUM') || 
+            (entitlement.toUpperCase() == 'TRIAL' && FeatureFlags.isTrialEnabled)) {
+          return 'switchToPremium';
+        }
+      } else if (subscriptionStatus == STATUS_GRACE_PERIOD) {
+        return 'premiumGrace';
       }
-    } else if (subscriptionStatus == STATUS_EXPIRED) {
-      if (entitlement.toUpperCase() == 'PREMIUM' || entitlement.toUpperCase() == 'TRIAL') {
-        return 'switchToPremium';
-      }
-    } else if (subscriptionStatus == STATUS_GRACE_PERIOD) {
-      return 'premiumGrace';
     }
     
     return null;
@@ -174,8 +251,8 @@ class SubscriptionConstants {
     return CTA_TEXTS[key] ?? '모든 플랜 보기';
   }
   
-  /// 구매 성공 메시지 가져오기
+  /// 구매 성공 메시지 가져오기 (Feature Flag 적용)
   static String getPurchaseSuccessMessage(String productId) {
-    return PURCHASE_SUCCESS_MESSAGES[productId] ?? '구매가 완료되었습니다!';
+    return PURCHASE_SUCCESS_MESSAGES[productId] ?? '업그레이드가 완료되었습니다!';
   }
 } 
