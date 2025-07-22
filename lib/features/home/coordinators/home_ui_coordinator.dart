@@ -190,15 +190,19 @@ class HomeUICoordinator {
             debugPrint('🎉 [HomeUICoordinator] 환영 모달 표시 시작');
           }
           
-          SimpleUpgradeModal.show(
-            context,
-            type: UpgradeModalType.trialOffer,
-            onClose: () {
-              if (kDebugMode) {
-                debugPrint('✅ [HomeUICoordinator] 환영 모달 완료');
-              }
-              onComplete(false); // 환영 모달은 구매 선택 없이 닫힘
-            },
+          showModalBottomSheet(
+            context: context,
+            isScrollControlled: true,
+            backgroundColor: Colors.transparent,
+            builder: (context) => SimpleUpgradeModal(
+              type: UpgradeModalType.trialOffer,
+              onClose: () {
+                if (kDebugMode) {
+                  debugPrint('✅ [HomeUICoordinator] 환영 모달 완료');
+                }
+                onComplete(false); // 환영 모달은 구매 선택 없이 닫힘
+              },
+            ),
           );
         }
       });
@@ -231,9 +235,11 @@ class HomeUICoordinator {
       default:
         // 🎯 구독 상태에 따라 모달 타입 결정
         final modalType = _determineModalType(subscriptionState);
-        SimpleUpgradeModal.show(
-          context,
-          type: modalType,
+        showModalBottomSheet(
+          context: context,
+          isScrollControlled: true,
+          backgroundColor: Colors.transparent,
+          builder: (context) => SimpleUpgradeModal(type: modalType),
         );
     }
   }

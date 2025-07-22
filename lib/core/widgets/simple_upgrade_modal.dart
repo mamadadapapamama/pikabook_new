@@ -4,6 +4,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 
 import '../theme/tokens/color_tokens.dart';
 import '../services/payment/in_app_purchase_service.dart';
+import '../services/subscription/unified_subscription_manager.dart';
 import '../utils/snackbar_helper.dart';
 import 'pika_button.dart';
 import 'dot_loading_indicator.dart';
@@ -262,7 +263,28 @@ class _SimpleUpgradeModalState extends State<SimpleUpgradeModal> {
       }
       
       if (result.success) {
-        // 성공 시 모달 닫기 (Snackbar는 InAppPurchaseService에서 표시됨)
+        // 성공 시 잠시 대기 후 모달 닫기 (서버 상태 업데이트 시간 확보)
+        setState(() {
+          _loadingMessage = '구매 완료! 상태 업데이트 중...';
+        });
+        
+        // 2초 대기 후 상태 강제 새로고침
+        await Future.delayed(const Duration(seconds: 2));
+        
+        // UnifiedSubscriptionManager 캐시 무효화로 최신 상태 강제 로드
+        try {
+          final subscriptionManager = UnifiedSubscriptionManager();
+          await subscriptionManager.invalidateCache();
+          
+          if (kDebugMode) {
+            debugPrint('✅ [SimpleUpgradeModal] 구매 완료 후 구독 상태 강제 새로고침 완료');
+          }
+        } catch (e) {
+          if (kDebugMode) {
+            debugPrint('⚠️ [SimpleUpgradeModal] 구독 상태 새로고침 실패: $e');
+          }
+        }
+        
         if (context.mounted) {
           Navigator.of(context).pop();
           widget.onClose?.call();

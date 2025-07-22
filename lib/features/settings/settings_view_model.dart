@@ -230,12 +230,16 @@ class SettingsViewModel extends ChangeNotifier {
             ? UpgradeModalType.premiumOffer 
             : UpgradeModalType.trialOffer);
     
-    SimpleUpgradeModal.show(
-      context,
-      type: finalModalType,
-      onClose: () async {
-        await refreshPlanInfo(force: true);
-      },
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => SimpleUpgradeModal(
+        type: finalModalType,
+        onClose: () async {
+          await refreshPlanInfo(force: true);
+        },
+      ),
     );
   }
 

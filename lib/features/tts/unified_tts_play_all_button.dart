@@ -80,7 +80,12 @@ class _UnifiedTtsPlayAllButtonState extends State<UnifiedTtsPlayAllButton> {
             ? UpgradeModalType.premiumOffer 
             : UpgradeModalType.trialOffer;
         
-        SimpleUpgradeModal.show(context, type: modalType);
+        showModalBottomSheet(
+          context: context,
+          isScrollControlled: true,
+          backgroundColor: Colors.transparent,
+          builder: (context) => SimpleUpgradeModal(type: modalType),
+        );
       }
       return;
     }
