@@ -122,5 +122,7 @@
 	<true/>
 	<key>UIKeyboardAppearance</key>
 	<string>UIKeyboardAppearanceDefault</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>This app does not use the microphone. The permission request is due to a third-party library requirement.</string>
 </dict>
 </plist>

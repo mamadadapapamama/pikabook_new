@@ -38,7 +38,7 @@ class SubscriptionConstants {
   /// 플랜 이름 (UI 표시용) - Feature Flag 적용
   static Map<String, String> get PLAN_DISPLAY_NAMES {
     final Map<String, String> plans = {
-      'free': '무료',
+      'free': '무료 (페이지 30장, 듣기 50회))',
     };
     
     // 일회성 프리미엄이 활성화된 경우

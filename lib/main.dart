@@ -13,10 +13,26 @@ import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'core/utils/logger.dart';
 
 // import 'package:shared_preferences/shared_preferences.dart';
 // import 'views/screens/home_screen_mvvm.dart';
 // import 'views/screens/note_detail_screen.dart';
+
+/// Logger 초기화 및 설정
+void _initializeLogger() {
+  if (kReleaseMode) {
+    // 릴리즈 모드에서는 에러만 출력
+    Logger.setMinLevel(LogLevel.error);
+    Logger.setEnableLogInRelease(false);
+  } else if (kDebugMode) {
+    // 디버그 모드에서는 모든 로그 출력
+    Logger.setMinLevel(LogLevel.debug);
+    Logger.setEnableLogInRelease(false);
+  }
+  
+  Logger.info('Logger 초기화 완료', tag: 'Logger');
+}
 
 /// 앱의 진입점
 /// 
@@ -24,6 +40,9 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 /// 모든 로직은 App 클래스에 위임합니다.
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Logger 초기화 및 설정
+  _initializeLogger();
   
   // Firebase 초기화
   try {
@@ -38,11 +57,9 @@ void main() async {
       sound: true,
     );
     
-    if (kDebugMode) {
-      debugPrint('✅ Firebase 및 FCM 초기화 완료');
-    }
+    Logger.info('Firebase 및 FCM 초기화 완료', tag: 'Firebase');
   } catch (e) {
-    debugPrint('❌ Firebase 초기화 실패: $e');
+    Logger.error('Firebase 초기화 실패', tag: 'Firebase', error: e);
     // 초기화 실패해도 앱은 계속 실행 (일부 기능 제한)
   }
   
@@ -52,9 +69,7 @@ void main() async {
   // 🌍 사용자의 실제 타임존 가져와서 설정
   await _setupUserTimezone();
   
-  if (kDebugMode) {
-    debugPrint('⏰ Timezone 초기화 완료: ${tz.local.name}');
-  }
+  Logger.info('Timezone 초기화 완료: ${tz.local.name}', tag: 'Timezone');
   
   // 성능 최적화 설정
   if (defaultTargetPlatform == TargetPlatform.iOS) {
@@ -67,27 +82,8 @@ void main() async {
     );
   }
   
-  // 디버그 로그 레벨 조정 (성능 최적화)
-  if (kReleaseMode) {
-    // 릴리즈 모드에서는 모든 디버그 출력 억제
-    debugPrint = (String? message, {int? wrapWidth}) {};
-  } else if (kDebugMode) {
-    // 디버그 모드에서도 과도한 로그 제한
-    final originalDebugPrint = debugPrint;
-    debugPrint = (String? message, {int? wrapWidth}) {
-      // 특정 패턴의 로그만 출력 (중요한 것만)
-      if (message != null && (
-        message.contains('❌') || // 에러
-        message.contains('✅') || // 성공
-        message.contains('🚨') || // 경고
-        message.contains('[HomeScreen]') || // 홈스크린
-        message.contains('[AuthService]') || // 인증
-        message.contains('[AppStoreSubscription]') // 구독
-      )) {
-        originalDebugPrint(message, wrapWidth: wrapWidth);
-      }
-    };
-  }
+  // Logger를 사용하므로 기존 debugPrint 오버라이드 제거
+  // Logger가 중앙 집중식으로 로그를 관리함
   
   // 시작 시 캐시 정리
   await _cleanupOnStart();
@@ -107,18 +103,18 @@ void main() async {
         forceRecaptchaFlow: false,
       );
       
-      // 🚨 디버그 모드에서 Firebase Analytics 자동 이벤트 수집 비활성화
-      // (중복 구매 이벤트 방지)
-      await FirebaseAnalytics.instance.setAnalyticsCollectionEnabled(false);
-      debugPrint('🚫 [DEBUG] Firebase Analytics 자동 수집 비활성화 (중복 이벤트 방지)');
-    }
-    
-    // Firebase Auth 자동 복원 방지 - Apple ID 다이얼로그 방지
-    await _preventAutoSignIn();
-    
-  } catch (e) {
-    debugPrint('❌ Firestore 설정 실패: $e');
+          // 🚨 디버그 모드에서 Firebase Analytics 자동 이벤트 수집 비활성화
+    // (중복 구매 이벤트 방지)
+    await FirebaseAnalytics.instance.setAnalyticsCollectionEnabled(false);
+    Logger.info('Firebase Analytics 자동 수집 비활성화 (중복 이벤트 방지)', tag: 'Firebase');
   }
+  
+  // Firebase Auth 자동 복원 방지 - Apple ID 다이얼로그 방지
+  await _preventAutoSignIn();
+  
+} catch (e) {
+  Logger.error('Firestore 설정 실패', tag: 'Firestore', error: e);
+}
 
   // 이미지 캐시 초기화
   final imageService = ImageService();
@@ -139,9 +135,7 @@ Future<void> _preventAutoSignIn() async {
     final currentUser = FirebaseAuth.instance.currentUser;
     
     if (currentUser == null) {
-      if (kDebugMode) {
-        debugPrint('✅ 로그인된 사용자 없음 - Apple ID 다이얼로그 방지 완료');
-      }
+      Logger.info('로그인된 사용자 없음 - Apple ID 다이얼로그 방지 완료', tag: 'Auth');
       return;
     }
     
@@ -152,46 +146,31 @@ Future<void> _preventAutoSignIn() async {
     );
     
     if (isAppleUser) {
-      if (kDebugMode) {
-        debugPrint('🍎 Apple 로그인 사용자 감지 - 자동 갱신 방지 처리');
-      }
+      Logger.info('Apple 로그인 사용자 감지 - 자동 갱신 방지 처리', tag: 'Auth');
       
       try {
         // 🎯 토큰 유효성을 갱신 없이 확인만 (forceRefresh: false)
         // 이때 시스템 오류 발생 시 조용히 처리
         await currentUser.getIdToken(false);
-        if (kDebugMode) {
-          debugPrint('✅ Apple 토큰 유효함 - 정상 유지');
-        }
+        Logger.info('Apple 토큰 유효함 - 정상 유지', tag: 'Auth');
       } catch (e) {
         // 🎯 시스템 오류(Code=-54) 등은 무시하고 계속 진행
         if (e.toString().contains('NSOSStatusErrorDomain Code=-54') ||
             e.toString().contains('process may not map database')) {
-          if (kDebugMode) {
-            debugPrint('⚠️ Apple 시스템 오류 감지 - 무시하고 계속 진행: $e');
-          }
+          Logger.warning('Apple 시스템 오류 감지 - 무시하고 계속 진행', tag: 'Auth', error: e);
           return; // 시스템 오류는 무시
         }
         
         // 실제 토큰 만료/무효인 경우에만 로그아웃
-        if (kDebugMode) {
-          debugPrint('⚠️ Apple 토큰 만료/무효 - 자동 로그아웃 처리: $e');
-        }
+        Logger.warning('Apple 토큰 만료/무효 - 자동 로그아웃 처리', tag: 'Auth', error: e);
         await FirebaseAuth.instance.signOut();
-        if (kDebugMode) {
-          debugPrint('✅ 자동 로그아웃 완료 - Apple ID 다이얼로그 방지됨');
-        }
+        Logger.info('자동 로그아웃 완료 - Apple ID 다이얼로그 방지됨', tag: 'Auth');
       }
     } else {
-      if (kDebugMode) {
-        debugPrint('✅ 일반 사용자 - Apple ID 다이얼로그 우려 없음');
-      }
-
+      Logger.info('일반 사용자 - Apple ID 다이얼로그 우려 없음', tag: 'Auth');
     }
   } catch (e) {
-    if (kDebugMode) {
-      debugPrint('❌ 자동 로그인 방지 처리 중 오류: $e');
-    }
+    Logger.error('자동 로그인 방지 처리 중 오류', tag: 'Auth', error: e);
     // 오류 발생 시에도 안전하게 진행
   }
 }
@@ -213,9 +192,9 @@ Future<void> _cleanupOnStart() async {
     // 이미지 서비스 임시 파일 정리
     await ImageService().cleanupTempFiles();
     
-    debugPrint('앱 시작 시 캐시 정리 완료');
+    Logger.info('앱 시작 시 캐시 정리 완료', tag: 'Cache');
   } catch (e) {
-    debugPrint('앱 시작 시 캐시 정리 중 오류: $e');
+    Logger.error('앱 시작 시 캐시 정리 중 오류', tag: 'Cache', error: e);
   }
 }
 
@@ -225,13 +204,9 @@ Future<void> _setupUserTimezone() async {
   try {
     final userTimezone = await FlutterTimezone.getLocalTimezone();
     tz.setLocalLocation(tz.getLocation(userTimezone));
-    if (kDebugMode) {
-      debugPrint('🌍 사용자의 실제 타임존 설정: $userTimezone');
-    }
+    Logger.info('사용자의 실제 타임존 설정: $userTimezone', tag: 'Timezone');
   } catch (e) {
-    if (kDebugMode) {
-      debugPrint('⚠️ 사용자의 실제 타임존 설정 실패. 기본값으로 설정: $e');
-    }
+    Logger.warning('사용자의 실제 타임존 설정 실패. 기본값으로 설정', tag: 'Timezone', error: e);
     tz.setLocalLocation(tz.getLocation('Asia/Seoul')); // 한국 시간대 기본값
   }
 }
