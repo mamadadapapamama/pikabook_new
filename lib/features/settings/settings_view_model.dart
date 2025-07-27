@@ -17,6 +17,7 @@ import '../../core/widgets/simple_upgrade_modal.dart';
 import '../../core/services/common/usage_limit_service.dart';
 import '../../core/widgets/usage_dialog.dart';
 import '../../core/constants/feature_flags.dart'; // 🎯 ManualUpgradeConstants 사용
+import '../../core/widgets/upgrade_request_form_dialog.dart';
 
 
 /// CTA 버튼 상태 모델
@@ -190,8 +191,8 @@ class SettingsViewModel extends ChangeNotifier {
       case 'premium_expired':
       case 'trial_expired':
       default:
-        // 무료 상태이거나 만료된 상태일 때는 수동 업그레이드 폼으로 연결
-        _openManualUpgradeForm();
+        // 무료 상태이거나 만료된 상태일 때는 네이티브 업그레이드 폼으로 연결
+        _openManualUpgradeForm(context);
         break;
     }
   }
@@ -255,20 +256,19 @@ class SettingsViewModel extends ChangeNotifier {
     }
   }
 
-  /// 🎯 수동 업그레이드 폼으로 이동
-  void _openManualUpgradeForm() async {
-    final url = Uri.parse(ManualUpgradeConstants.MANUAL_UPGRADE_FORM_URL);
+  /// 🎯 네이티브 업그레이드 폼으로 이동
+  void _openManualUpgradeForm(BuildContext context) {
     if (kDebugMode) {
-      print('📝 [Settings] 수동 업그레이드 폼으로 이동: $url');
+      print('📧 [Settings] 네이티브 업그레이드 폼 열기');
     }
-    if (await canLaunchUrl(url)) {
-      await launchUrl(url, mode: LaunchMode.externalApplication);
-    } else {
-      if (kDebugMode) {
-        print('❌ [Settings] 수동 업그레이드 폼 열기 실패');
-      }
-    }
+    // 네이티브 폼 다이얼로그 표시
+    showDialog(
+      context: context,
+      builder: (context) => const UpgradeRequestFormDialog(),
+    );
   }
+
+
 
   // --- 언어 및 학습 설정 ---
   Future<bool> updateUserName(String newName) async {

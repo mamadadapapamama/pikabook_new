@@ -67,11 +67,11 @@ class ApiService {
       Logger.api('번역 완료', tag: 'TranslateAPI');
       Logger.performance('총 소요시간: ${apiTotalTime}ms, 네트워크: ${networkTime}ms, 오버헤드: ${apiTotalTime - networkTime}ms', tag: 'TranslateAPI');
       Logger.performance('평균 응답시간: ${_performanceStats['averageTime']}ms', tag: 'TranslateAPI');
-      
-      // 서버에서 반환한 통계 정보도 출력
-      final data = Map<String, dynamic>.from(result.data);
-      if (data['statistics'] != null) {
-        final stats = Map<String, dynamic>.from(data['statistics']);
+        
+        // 서버에서 반환한 통계 정보도 출력
+        final data = Map<String, dynamic>.from(result.data);
+        if (data['statistics'] != null) {
+          final stats = Map<String, dynamic>.from(data['statistics']);
         Logger.performance('서버 처리시간: ${stats['processingTime']}ms, 세그먼트: ${stats['segmentCount']}개, 문자수: ${stats['totalCharacters']}자', tag: 'TranslateAPI');
       }
 

@@ -103,18 +103,18 @@ void main() async {
         forceRecaptchaFlow: false,
       );
       
-          // 🚨 디버그 모드에서 Firebase Analytics 자동 이벤트 수집 비활성화
-    // (중복 구매 이벤트 방지)
-    await FirebaseAnalytics.instance.setAnalyticsCollectionEnabled(false);
+      // 🚨 디버그 모드에서 Firebase Analytics 자동 이벤트 수집 비활성화
+      // (중복 구매 이벤트 방지)
+      await FirebaseAnalytics.instance.setAnalyticsCollectionEnabled(false);
     Logger.info('Firebase Analytics 자동 수집 비활성화 (중복 이벤트 방지)', tag: 'Firebase');
-  }
-  
-  // Firebase Auth 자동 복원 방지 - Apple ID 다이얼로그 방지
-  await _preventAutoSignIn();
-  
-} catch (e) {
+    }
+    
+    // Firebase Auth 자동 복원 방지 - Apple ID 다이얼로그 방지
+    await _preventAutoSignIn();
+    
+  } catch (e) {
   Logger.error('Firestore 설정 실패', tag: 'Firestore', error: e);
-}
+  }
 
   // 이미지 캐시 초기화
   final imageService = ImageService();

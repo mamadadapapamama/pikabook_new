@@ -11,6 +11,7 @@ import '../../core/services/common/usage_limit_service.dart';
 import '../../core/services/subscription/unified_subscription_manager.dart';
 import '../../core/constants/feature_flags.dart';
 import '../../core/utils/snackbar_helper.dart';
+import '../../core/widgets/upgrade_request_form_dialog.dart';
 
 /// 통합 TTS 전체 재생 버튼
 class UnifiedTtsPlayAllButton extends StatefulWidget {
@@ -160,16 +161,12 @@ class _UnifiedTtsPlayAllButtonState extends State<UnifiedTtsPlayAllButton> {
     );
   }
 
-  /// 🎯 수동 업그레이드 폼 열기
-  void _openManualUpgradeForm() async {
-    final url = Uri.parse(ManualUpgradeConstants.MANUAL_UPGRADE_FORM_URL);
-    if (await canLaunchUrl(url)) {
-      await launchUrl(url, mode: LaunchMode.externalApplication);
-    } else {
-      if (mounted) {
-        SnackbarHelper.showError('수동 업그레이드 폼을 열 수 없습니다.');
-      }
-    }
+  /// 🎯 네이티브 업그레이드 폼 열기
+  void _openManualUpgradeForm() {
+    showDialog(
+      context: context,
+      builder: (context) => const UpgradeRequestFormDialog(),
+    );
   }
   
   @override

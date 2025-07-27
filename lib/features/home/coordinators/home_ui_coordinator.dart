@@ -8,6 +8,7 @@ import '../../../core/services/authentication/user_preferences_service.dart';
 import '../../../core/widgets/simple_upgrade_modal.dart';
 import '../../../core/widgets/unified_banner.dart';
 import '../../../core/models/subscription_state.dart';
+import '../../../core/widgets/upgrade_request_form_dialog.dart';
 
 /// 🎨 HomeScreen UI 관리 Coordinator
 /// 
@@ -261,7 +262,10 @@ class HomeUICoordinator {
 
   /// 📧 문의 폼 표시 (프리미엄 사용자용)
   void showContactForm(BuildContext context) {
-    launchUrl(Uri.parse('https://forms.gle/YaeznYjGLiMdHmBD9'));
+    showDialog(
+      context: context,
+      builder: (context) => const UpgradeRequestFormDialog(),
+    );
   }
   
   /// 🛒 App Store 열기 (결제 정보 관리)

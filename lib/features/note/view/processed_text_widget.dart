@@ -21,6 +21,7 @@ import '../../../core/services/subscription/unified_subscription_manager.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/constants/feature_flags.dart';
 import '../../../core/utils/snackbar_helper.dart';
+import '../../../core/widgets/upgrade_request_form_dialog.dart';
 
 /// ProcessedTextWidget은 처리된 텍스트(중국어 원문, 병음, 번역)를 표시하는 위젯입니다.
 
@@ -587,15 +588,11 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
     );
   }
 
-  /// 🎯 수동 업그레이드 폼 열기
-  void _openManualUpgradeForm() async {
-    final url = Uri.parse(ManualUpgradeConstants.MANUAL_UPGRADE_FORM_URL);
-    if (await canLaunchUrl(url)) {
-      await launchUrl(url, mode: LaunchMode.externalApplication);
-    } else {
-      if (mounted) {
-        SnackbarHelper.showError('수동 업그레이드 폼을 열 수 없습니다.');
-      }
-    }
+  /// 🎯 네이티브 업그레이드 폼 열기
+  void _openManualUpgradeForm() {
+    showDialog(
+      context: context,
+      builder: (context) => const UpgradeRequestFormDialog(),
+    );
   }
 }
