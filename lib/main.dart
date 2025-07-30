@@ -106,7 +106,8 @@ void main() async {
       // 🚨 디버그 모드에서 Firebase Analytics 자동 이벤트 수집 비활성화
       // (중복 구매 이벤트 방지)
       await FirebaseAnalytics.instance.setAnalyticsCollectionEnabled(false);
-    Logger.info('Firebase Analytics 자동 수집 비활성화 (중복 이벤트 방지)', tag: 'Firebase');
+      await FirebaseAnalytics.instance.setSessionTimeoutDuration(const Duration(seconds: 0));
+      Logger.info('Firebase Analytics 자동 수집 비활성화 (중복 이벤트 방지)', tag: 'Firebase');
     }
     
     // Firebase Auth 자동 복원 방지 - Apple ID 다이얼로그 방지

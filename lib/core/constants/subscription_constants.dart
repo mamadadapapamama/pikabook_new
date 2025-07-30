@@ -75,7 +75,7 @@ class SubscriptionConstants {
       'free': {
         'title': '🎯 무료 플랜 이용 중',
         'subtitle': '더 많은 기능을 사용해보세요!',
-        'buttonText': '프리미엄 업그레이드 요청',
+        'buttonText': '사용량 추가 요청하기',
       },
       'premiumStarted': {
         'title': '🎉 프리미엄 이용 중!',
@@ -85,7 +85,7 @@ class SubscriptionConstants {
       'usageLimitFree': {
         'title': '📊 무료 플랜 사용량 한도 도달',
         'subtitle': '프리미엄으로 업그레이드하여 무제한 이용하세요',
-        'buttonText': '프리미엄 업그레이드 요청',
+        'buttonText': '사용량 추가 요청하기',
       },
       'usageLimitPremium': {
         'title': '📊 프리미엄 사용량 한도 도달',
@@ -178,9 +178,9 @@ class SubscriptionConstants {
   
   static Map<String, String> get CTA_TEXTS {
     final Map<String, String> texts = {
-      'free_active': '프리미엄 업그레이드 요청',
+      'free_active': '사용량 추가 요청하기',
       'premium_active': '현재 프리미엄 이용 중',
-      'premium_expired': '프리미엄 업그레이드 요청',
+      'premium_expired': '사용량 추가 요청하기',
     };
     
     // 트라이얼 기능이 활성화된 경우만 추가 (현재 비활성화)
@@ -188,7 +188,7 @@ class SubscriptionConstants {
       texts.addAll({
         'trial_active': '현재 프리미엄 이용 중',
         'trial_cancelling': '현재 프리미엄 이용 중',
-        'trial_expired': '프리미엄 업그레이드 요청',
+        'trial_expired': '사용량 추가 요청하기',
       });
     }
     

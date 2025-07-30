@@ -128,7 +128,7 @@ class _UpgradeRequestFormDialogState extends State<UpgradeRequestFormDialog> {
         children: [
           Expanded(
             child: Text(
-              '🚀 프리미엄 업그레이드 요청',
+              '🚀 사용량 추가 요청하기',
               style: (isTablet ? TypographyTokens.subtitle1 : TypographyTokens.subtitle2).copyWith(
                 fontWeight: FontWeight.w600,
               ),
@@ -453,7 +453,7 @@ class _UpgradeRequestFormDialogState extends State<UpgradeRequestFormDialog> {
           Navigator.of(context).pop();
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('프리미엄 업그레이드 요청이 성공적으로 전송되었습니다!'),
+              content: Text('사용량 추가 요청이 성공적으로 전송되었습니다!'),
               backgroundColor: ColorTokens.secondary,
             ),
           );

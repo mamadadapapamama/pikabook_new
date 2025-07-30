@@ -138,4 +138,64 @@ class PageService {
       return 0;
     }
   }
+
+  /// 특정 노트의 모든 페이지 삭제 (테스트용)
+  Future<void> deleteAllPagesForNote(String noteId) async {
+    try {
+      final querySnapshot = await getPagesForNoteQuery(noteId).get();
+      final batch = _firestore.batch();
+      
+      for (final doc in querySnapshot.docs) {
+        batch.delete(doc.reference);
+      }
+      
+      await batch.commit();
+      debugPrint('노트의 모든 페이지 삭제 완료: $noteId (${querySnapshot.docs.length}개)');
+    } catch (e) {
+      debugPrint('노트의 페이지 삭제 중 오류 발생: $e');
+      rethrow;
+    }
+  }
+
+  /// 특정 사용자의 모든 페이지 삭제 (테스트용)
+  Future<void> deleteAllPagesForUser(String userId) async {
+    try {
+      final querySnapshot = await _pagesCollection
+          .where('userId', isEqualTo: userId)
+          .get();
+      
+      final batch = _firestore.batch();
+      
+      for (final doc in querySnapshot.docs) {
+        batch.delete(doc.reference);
+      }
+      
+      await batch.commit();
+      debugPrint('사용자의 모든 페이지 삭제 완료: $userId (${querySnapshot.docs.length}개)');
+    } catch (e) {
+      debugPrint('사용자의 페이지 삭제 중 오류 발생: $e');
+      rethrow;
+    }
+  }
+
+  /// 특정 날짜 이전의 모든 페이지 삭제 (테스트용)
+  Future<void> deletePagesOlderThan(DateTime date) async {
+    try {
+      final querySnapshot = await _pagesCollection
+          .where('createdAt', isLessThan: date)
+          .get();
+      
+      final batch = _firestore.batch();
+      
+      for (final doc in querySnapshot.docs) {
+        batch.delete(doc.reference);
+      }
+      
+      await batch.commit();
+      debugPrint('${date} 이전 페이지 삭제 완료: ${querySnapshot.docs.length}개');
+    } catch (e) {
+      debugPrint('날짜별 페이지 삭제 중 오류 발생: $e');
+      rethrow;
+    }
+  }
 }
