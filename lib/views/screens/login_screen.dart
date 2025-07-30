@@ -1,16 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
-import 'package:flutter/foundation.dart';
 
 import '../../../core/theme/tokens/color_tokens.dart';
 import '../../../core/theme/tokens/typography_tokens.dart';
 import '../../../core/theme/tokens/spacing_tokens.dart';
 import '../../../core/widgets/dot_loading_indicator.dart';
-import '../../features/login/view_model/login_view_model.dart';
+import '../../features/email_login/view_model/login_view_model.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/gestures.dart';
-import '../../features/login/dialogs/password_reset_dialog.dart';
+import '../../features/email_login/dialogs/password_reset_dialog.dart';
 
 
 class LoginScreen extends StatelessWidget {

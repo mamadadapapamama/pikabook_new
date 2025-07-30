@@ -1,6 +1,4 @@
-import 'dart:convert';
 import 'text_unit.dart';
-import 'package:flutter/foundation.dart';
 
 /// 텍스트 처리 모드
 enum TextProcessingMode {

@@ -3,10 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_storage/firebase_storage.dart';
-import 'dart:convert';
 import 'dart:async';
 import '../../constants/plan_constants.dart';
-import '../subscription/unified_subscription_manager.dart';
 import '../../models/subscription_state.dart';
 
 /// 🔄 사용량 제한 관리 서비스 (단순화된 버전)

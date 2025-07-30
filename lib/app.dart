@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/foundation.dart';
-import 'package:provider/provider.dart';
 import 'dart:async';
 import 'views/screens/login_screen.dart';
 import 'features/home/home_screen.dart';
@@ -15,15 +13,11 @@ import 'views/screens/loading_screen.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/tokens/color_tokens.dart';
 import 'features/sample/sample_home_screen.dart';
-import 'features/home/home_viewmodel.dart';
 import 'core/services/notification/notification_service.dart';
 import 'core/services/authentication/auth_service.dart';
-import 'core/services/authentication/user_account_service.dart';
 import 'core/services/subscription/unified_subscription_manager.dart';
 import 'core/models/subscription_state.dart';
 import 'core/constants/feature_flags.dart';
-
-import 'package:cloud_firestore/cloud_firestore.dart'; // FirebaseFirestore 추가
 
 /// 오버스크롤 색상을 지정하는 커스텀 스크롤 비헤이비어
 class CustomScrollBehavior extends ScrollBehavior {
