@@ -401,15 +401,7 @@ class TestDataGenerator {
     }
   }
 
-  /// 사용량 제한 설정 (플랜 기반 제한 사용으로 더 이상 필요하지 않음)
-  /// 🎯 커스텀 제한 대신 PlanService.PLAN_LIMITS를 사용하여 정확한 제한값 적용
-  @deprecated
-  static Future<void> _createUserLimits(String uid, String limitType) async {
-    // 더 이상 사용하지 않음 - 플랜 기반 제한 사용
-    if (kDebugMode) {
-      debugPrint('⚠️ [TestDataGenerator] _createUserLimits는 더 이상 사용되지 않습니다. 플랜 기반 제한을 사용합니다.');
-    }
-  }
+
 
   /// 모든 테스트 계정 삭제 (정리용)
   static Future<void> deleteAllTestAccounts() async {
