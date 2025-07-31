@@ -1,4 +1,5 @@
 import 'text_unit.dart';
+import 'processing_status.dart';
 
 /// 텍스트 처리 모드
 enum TextProcessingMode {
@@ -12,13 +13,6 @@ enum TextDisplayMode {
   noPinyin,  // 원문 + 번역만 표시 (병음 없음)
 }
 
-/// 스트리밍 상태
-enum StreamingStatus {
-  preparing,    // 준비 중
-  streaming,    // 스트리밍 중
-  completed,    // 완료
-  failed,       // 실패
-}
 
 /// 처리된 텍스트를 나타내는 모델입니다.
 class ProcessedText {
@@ -30,8 +24,8 @@ class ProcessedText {
   final String sourceLanguage;
   final String targetLanguage;
   
-  // 스트리밍 관련 필드
-  final StreamingStatus streamingStatus;
+  // 스트리밍 관련 필드 (ProcessingStatus 통합)
+  final ProcessingStatus streamingStatus;
   final int completedUnits;
   final double progress;
 
@@ -43,7 +37,7 @@ class ProcessedText {
     required this.units,
     required this.sourceLanguage,
     required this.targetLanguage,
-    this.streamingStatus = StreamingStatus.completed,
+    this.streamingStatus = ProcessingStatus.completed,
     this.completedUnits = 0,
     this.progress = 1.0,
   });
@@ -71,7 +65,7 @@ class ProcessedText {
       units: units,
       sourceLanguage: sourceLanguage,
       targetLanguage: targetLanguage,
-      streamingStatus: StreamingStatus.streaming,
+      streamingStatus: ProcessingStatus.translating,
       completedUnits: 0,
       progress: 0.0,
     );
@@ -89,7 +83,7 @@ class ProcessedText {
           .toList(),
       sourceLanguage: json['sourceLanguage'] as String,
       targetLanguage: json['targetLanguage'] as String,
-      streamingStatus: StreamingStatus.values[json['streamingStatus'] as int? ?? StreamingStatus.completed.index],
+      streamingStatus: ProcessingStatus.values[json['streamingStatus'] as int? ?? ProcessingStatus.completed.index],
       completedUnits: json['completedUnits'] as int? ?? 0,
       progress: (json['progress'] as num?)?.toDouble() ?? 1.0,
     );
@@ -120,7 +114,7 @@ class ProcessedText {
     List<TextUnit>? units,
     String? sourceLanguage,
     String? targetLanguage,
-    StreamingStatus? streamingStatus,
+    ProcessingStatus? streamingStatus,
     int? completedUnits,
     double? progress,
   }) {
@@ -155,8 +149,8 @@ class ProcessedText {
     
     // 스트리밍 상태 업데이트
     final newStatus = completed == units.length 
-        ? StreamingStatus.completed 
-        : StreamingStatus.streaming;
+        ? ProcessingStatus.completed 
+        : ProcessingStatus.translating;
     
     // 전체 번역 텍스트 재계산
     final newFullTranslatedText = newUnits
@@ -180,10 +174,10 @@ class ProcessedText {
   }
   
   /// 스트리밍 중인지 확인
-  bool get isStreaming => streamingStatus == StreamingStatus.streaming;
+  bool get isStreaming => streamingStatus.isStreaming;
   
   /// 완료되었는지 확인
-  bool get isCompleted => streamingStatus == StreamingStatus.completed;
+  bool get isCompleted => streamingStatus.isCompleted;
   
   /// 디버그 정보 문자열 반환
   @override

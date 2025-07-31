@@ -1,3 +1,5 @@
+import '../utils/string_utils.dart';
+
 /// 프리미엄 업그레이드 요청 폼 데이터 모델
 class UpgradeRequestForm {
   /// 추가로 필요한 기능들 (체크박스)
@@ -39,14 +41,14 @@ class UpgradeRequestForm {
   String generateEmailBody() {
     final buffer = StringBuffer();
     
-    buffer.writeln('=== 피카북 프리미엄 업그레이드 요청 ===');
+    buffer.writeln('=== 사용량 추가 요청 ===');
     buffer.writeln('');
     
     // 사용자 정보
-    if (userName != null && userName!.isNotEmpty) {
+    if (StringUtils.isNotNullOrEmpty(userName)) {
       buffer.writeln('사용자 이름: $userName');
     }
-    if (userEmail != null && userEmail!.isNotEmpty) {
+    if (StringUtils.isNotNullOrEmpty(userEmail)) {
       buffer.writeln('사용자 이메일: $userEmail');
     }
     buffer.writeln('');
@@ -68,14 +70,14 @@ class UpgradeRequestForm {
     buffer.writeln('');
     
     // 기타 기능 요청
-    if (otherFeatureRequest != null && otherFeatureRequest!.isNotEmpty) {
+    if (StringUtils.isNotNullOrEmpty(otherFeatureRequest)) {
       buffer.writeln('💡 기타 기능 요청:');
       buffer.writeln(otherFeatureRequest);
       buffer.writeln('');
     }
     
     // 기능 제안
-    if (featureSuggestion != null && featureSuggestion!.isNotEmpty) {
+    if (StringUtils.isNotNullOrEmpty(featureSuggestion)) {
       buffer.writeln('💭 피카북에 이런 기능이 있었으면 좋겠어요:');
       buffer.writeln(featureSuggestion);
       buffer.writeln('');
@@ -85,7 +87,7 @@ class UpgradeRequestForm {
     buffer.writeln('🎤 사용자 경험 개선을 위한 인터뷰 참여 의향:');
     if (interviewParticipation == true) {
       buffer.writeln('✅ 예');
-      if (contactInfo != null && contactInfo!.isNotEmpty) {
+      if (StringUtils.isNotNullOrEmpty(contactInfo)) {
         buffer.writeln('📞 연락처: $contactInfo');
       }
     } else if (interviewParticipation == false) {
@@ -102,7 +104,7 @@ class UpgradeRequestForm {
 
   /// 이메일 제목 생성
   String generateEmailSubject() {
-    return '[피카북] 프리미엄 업그레이드 요청';
+    return '[피카북] 사용량 추가 요청';
   }
 
   /// 폼 유효성 검사
@@ -111,11 +113,11 @@ class UpgradeRequestForm {
     final hasFeatureRequest = needAdditionalNoteFeature || 
                              needListeningFeature || 
                              needOtherFeatures ||
-                             (featureSuggestion != null && featureSuggestion!.isNotEmpty);
+                             StringUtils.isNotNullOrEmpty(featureSuggestion);
     
     // 인터뷰 참여를 선택했다면 연락처가 필요
     final hasValidContact = interviewParticipation != true || 
-                           (contactInfo != null && contactInfo!.isNotEmpty);
+                           StringUtils.isNotNullOrEmpty(contactInfo);
     
     return hasFeatureRequest && hasValidContact;
   }

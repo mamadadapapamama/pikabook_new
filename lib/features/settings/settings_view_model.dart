@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import '../../core/utils/logging_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -78,7 +79,7 @@ class SettingsViewModel extends ChangeNotifier {
     final isUserChanged = _lastUserId != null && _lastUserId != currentUserId;
     
     if (isUserChanged) {
-      if (kDebugMode) print('🔄 [Settings] 사용자 변경 감지. 데이터 초기화.');
+      LoggingUtils.stateChange('Settings', 'user_changed', 'data_reset', context: 'User ID change detected');
       _resetAllData();
     }
     _lastUserId = currentUserId;
@@ -90,9 +91,7 @@ class SettingsViewModel extends ChangeNotifier {
 
   /// 🎯 외부에서 구독 상태 설정 (App.dart에서 호출)
   void setSubscriptionInfo(SubscriptionInfo subscriptionInfo) {
-    if (kDebugMode) {
-      print('📝 [Settings] 구독 정보 설정: ${subscriptionInfo.planTitle}');
-    }
+    LoggingUtils.subscription('구독 정보 설정: ${subscriptionInfo.planTitle}', tag: 'Settings');
     _subscriptionInfo = subscriptionInfo;
     notifyListeners();
   }
@@ -100,11 +99,11 @@ class SettingsViewModel extends ChangeNotifier {
   /// 플랜 정보 새로고침 (UI 호출용 - 강제 새로고침만)
   Future<void> refreshPlanInfo({bool force = false}) async {
     if (_isLoading && !force) {
-      if (kDebugMode) print('⏭️ [Settings] 이미 로딩 중 - 중복 호출 방지');
+      LoggingUtils.debug('⏭️ 이미 로딩 중 - 중복 호출 방지', tag: 'Settings');
       return;
     }
     
-    if (kDebugMode) print('🔄 [Settings] 강제 새로고침 요청 - UnifiedSubscriptionManager 캐시 무효화');
+    LoggingUtils.debug('🔄 강제 새로고침 요청 - UnifiedSubscriptionManager 캐시 무효화', tag: 'Settings');
     
     // 🎯 UI 피드백을 위한 로딩 상태 표시
     _setLoading(true);
@@ -199,16 +198,11 @@ class SettingsViewModel extends ChangeNotifier {
 
   /// 사용량 조회 다이얼로그 표시
   Future<void> showUsageDialog(BuildContext context) async {
-    if (_subscriptionInfo == null) {
-      if (kDebugMode) print('SubscriptionInfo가 null이므로 UsageDialog를 표시할 수 없습니다.');
-      return;
-    }
-    
     try {
       showDialog(
         context: context,
         builder: (BuildContext context) {
-          return UsageDialog(subscriptionInfo: _subscriptionInfo!);
+          return const UsageDialog();
         },
       );
     } catch (e) {

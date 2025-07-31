@@ -1,93 +1,149 @@
-/// 다국어 지원을 위한 언어 관련 상수 정의
-/// 중국어 학습 중점 앱으로 중국어 관련 상수만 정의합니다.
+/// 🌍 통합 언어 상수 클래스
+/// 다국어 지원을 위한 모든 언어 관련 상수를 중앙 집중 관리합니다.
+/// 중국어 학습 중점 앱으로 중국어 관련 상수가 중심입니다.
 
-// 지원하는 소스 언어 (학습 대상 언어)
-class SourceLanguage {
-  static const String CHINESE = 'zh-CN';
-  static const String CHINESE_TRADITIONAL = 'zh-TW';
+class LanguageConstants {
+  // ────────────────────────────────────────────────────────────────────────
+  // 🎯 언어 코드 상수
+  // ────────────────────────────────────────────────────────────────────────
   
-  // MVP에서는 중국어(간체)만 지원
-  static const String DEFAULT = CHINESE;
+  /// 소스 언어 (학습 대상 언어)
+  static const String SOURCE_CHINESE = 'zh-CN';
+  static const String SOURCE_CHINESE_TRADITIONAL = 'zh-TW';
   
-  // 현재 지원 언어 (MVP)
-  static const List<String> SUPPORTED = [CHINESE];
+  /// 타겟 언어 (번역 결과 언어)
+  static const String TARGET_KOREAN = 'ko';
+  static const String TARGET_ENGLISH = 'en';
+  static const String TARGET_CHINESE = 'zh-CN';
   
-  // 확장 단계에서 지원 예정인 언어들
-  static const List<String> FUTURE_SUPPORTED = [CHINESE_TRADITIONAL];
+  /// TTS 언어 코드
+  static const String TTS_CHINESE = 'zh-CN';
+  static const String TTS_KOREAN = 'ko-KR';
+  static const String TTS_ENGLISH = 'en-US';
   
-  // 언어 코드에 해당하는 언어 이름을 반환
-  static String getName(String code) {
+  // ────────────────────────────────────────────────────────────────────────
+  // 📋 기본값 및 지원 목록
+  // ────────────────────────────────────────────────────────────────────────
+  
+  /// 기본 소스 언어 (MVP: 중국어 간체)
+  static const String DEFAULT_SOURCE = SOURCE_CHINESE;
+  
+  /// 기본 타겟 언어 (MVP: 한국어)
+  static const String DEFAULT_TARGET = TARGET_KOREAN;
+  
+  /// 현재 지원하는 소스 언어 목록 (MVP)
+  static const List<String> SUPPORTED_SOURCE_LANGUAGES = [SOURCE_CHINESE];
+  
+  /// 현재 지원하는 타겟 언어 목록 (MVP)
+  static const List<String> SUPPORTED_TARGET_LANGUAGES = [TARGET_KOREAN];
+  
+  /// 확장 예정 소스 언어
+  static const List<String> FUTURE_SOURCE_LANGUAGES = [SOURCE_CHINESE_TRADITIONAL];
+  
+  /// 확장 예정 타겟 언어
+  static const List<String> FUTURE_TARGET_LANGUAGES = [TARGET_ENGLISH];
+  
+  // ────────────────────────────────────────────────────────────────────────
+  // 🔧 헬퍼 함수들
+  // ────────────────────────────────────────────────────────────────────────
+  
+  /// 소스 언어 코드에 해당하는 언어 이름 반환
+  static String getSourceLanguageName(String code) {
     switch (code) {
-      case CHINESE:
+      case SOURCE_CHINESE:
         return '중국어 (간체)';
-      case CHINESE_TRADITIONAL:
+      case SOURCE_CHINESE_TRADITIONAL:
         return '중국어 (번체)';
       default:
         return '알 수 없는 언어';
     }
   }
-}
-
-// 지원하는 타겟 언어 (번역 결과 언어)
-class TargetLanguage {
-  static const String KOREAN = 'ko';
-  static const String ENGLISH = 'en';
-  static const String CHINESE = 'zh-CN';
   
-  // MVP에서는 한국어만 지원
-  static const String DEFAULT = KOREAN;
-  
-  // 현재 지원 언어 (MVP)
-  static const List<String> SUPPORTED = [KOREAN];
-  
-  // 확장 단계에서 지원 예정인 언어들
-  static const List<String> FUTURE_SUPPORTED = [ENGLISH];
-  
-  // 언어 코드에 해당하는 언어 이름을 반환
-  static String getName(String code) {
+  /// 타겟 언어 코드에 해당하는 언어 이름 반환
+  static String getTargetLanguageName(String code) {
     switch (code) {
-      case KOREAN:
+      case TARGET_KOREAN:
         return '한국어';
-      case ENGLISH:
+      case TARGET_ENGLISH:
         return 'English (Coming Soon)';
-      case CHINESE:
+      case TARGET_CHINESE:
         return '중국어';
       default:
         return '알 수 없는 언어';
     }
   }
-}
-
-// TTS 언어 설정
-class TtsLanguage {
-  static const String CHINESE = 'zh-CN';
-  static const String KOREAN = 'ko-KR';
-  static const String ENGLISH = 'en-US';
   
-  // TTS 음성 매핑
-  static String getVoiceName(String languageCode) {
+  /// TTS 언어 코드에 해당하는 음성 이름 반환
+  static String getTtsVoiceName(String languageCode) {
     switch (languageCode) {
-      case CHINESE:
+      case TTS_CHINESE:
         return 'zh-CN-Standard-A';
-      case KOREAN:
+      case TTS_KOREAN:
         return 'ko-KR-Standard-A';
-      case ENGLISH:
+      case TTS_ENGLISH:
         return 'en-US-Standard-C';
       default:
         return 'zh-CN-Standard-A'; // 기본값
     }
   }
   
-  // 언어에 해당하는 TTS 언어 코드 반환
+  /// 소스 언어에 해당하는 TTS 언어 코드 반환
   static String getTtsLanguageCode(String sourceLanguage) {
     switch (sourceLanguage) {
-      case SourceLanguage.CHINESE:
-      case SourceLanguage.CHINESE_TRADITIONAL:
-        return CHINESE;
+      case SOURCE_CHINESE:
+      case SOURCE_CHINESE_TRADITIONAL:
+        return TTS_CHINESE;
       default:
-        return CHINESE; // 기본값 (MVP)
+        return TTS_CHINESE; // 기본값 (MVP)
     }
   }
+  
+  /// 소스 언어가 지원되는지 확인
+  static bool isSourceLanguageSupported(String code) {
+    return SUPPORTED_SOURCE_LANGUAGES.contains(code);
+  }
+  
+  /// 타겟 언어가 지원되는지 확인
+  static bool isTargetLanguageSupported(String code) {
+    return SUPPORTED_TARGET_LANGUAGES.contains(code);
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────
+// 🔄 하위 호환성을 위한 레거시 클래스들 (단순 래퍼)
+// ────────────────────────────────────────────────────────────────────────
+
+/// @deprecated LanguageConstants.SOURCE_* 사용 권장
+class SourceLanguage {
+  static const String CHINESE = LanguageConstants.SOURCE_CHINESE;
+  static const String CHINESE_TRADITIONAL = LanguageConstants.SOURCE_CHINESE_TRADITIONAL;
+  static const String DEFAULT = LanguageConstants.DEFAULT_SOURCE;
+  static const List<String> SUPPORTED = LanguageConstants.SUPPORTED_SOURCE_LANGUAGES;
+  static const List<String> FUTURE_SUPPORTED = LanguageConstants.FUTURE_SOURCE_LANGUAGES;
+  
+  static String getName(String code) => LanguageConstants.getSourceLanguageName(code);
+}
+
+/// @deprecated LanguageConstants.TARGET_* 사용 권장
+class TargetLanguage {
+  static const String KOREAN = LanguageConstants.TARGET_KOREAN;
+  static const String ENGLISH = LanguageConstants.TARGET_ENGLISH;
+  static const String CHINESE = LanguageConstants.TARGET_CHINESE;
+  static const String DEFAULT = LanguageConstants.DEFAULT_TARGET;
+  static const List<String> SUPPORTED = LanguageConstants.SUPPORTED_TARGET_LANGUAGES;
+  static const List<String> FUTURE_SUPPORTED = LanguageConstants.FUTURE_TARGET_LANGUAGES;
+  
+  static String getName(String code) => LanguageConstants.getTargetLanguageName(code);
+}
+
+/// @deprecated LanguageConstants.TTS_* 및 getTts* 메서드 사용 권장
+class TtsLanguage {
+  static const String CHINESE = LanguageConstants.TTS_CHINESE;
+  static const String KOREAN = LanguageConstants.TTS_KOREAN;
+  static const String ENGLISH = LanguageConstants.TTS_ENGLISH;
+  
+  static String getVoiceName(String languageCode) => LanguageConstants.getTtsVoiceName(languageCode);
+  static String getTtsLanguageCode(String sourceLanguage) => LanguageConstants.getTtsLanguageCode(sourceLanguage);
 }
 
 /// 언어별 처리 방식 정의

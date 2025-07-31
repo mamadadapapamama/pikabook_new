@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import '../../../core/models/processed_text.dart';
 import '../../../core/models/text_unit.dart';
+import '../../../core/models/processing_status.dart';
 import '../../../core/theme/tokens/color_tokens.dart';
 import '../../../core/theme/tokens/typography_tokens.dart';
 import '../../../core/widgets/loading_dots_widget.dart';
@@ -144,7 +145,7 @@ class _ParagraphModeWidgetState extends State<ParagraphModeWidget> {
 
     // 스트리밍 중이거나 준비 중일 때 로딩 점 표시
     final shouldShowLoading = widget.processedText.isStreaming || 
-                             widget.processedText.streamingStatus == StreamingStatus.preparing;
+                             widget.processedText.streamingStatus == ProcessingStatus.preparing;
     
     if (shouldShowLoading) {
       blockWidgets.add(const SizedBox(height: 16));

@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../models/text_unit.dart';
 import '../../models/processed_text.dart';
+import '../../models/processing_status.dart';
 import '../../models/page_processing_data.dart';
 import '../../../features/note/services/page_service.dart';
 
@@ -51,7 +52,7 @@ class StreamingPageUpdateService {
       );
       
       // 스트리밍 상태 결정
-      final streamingStatus = isCompleted ? StreamingStatus.completed : StreamingStatus.streaming;
+      final streamingStatus = isCompleted ? ProcessingStatus.completed : ProcessingStatus.translating;
 
       // ProcessedText 생성 (OCR + LLM 혼합)
       final processedText = _createProcessedText(
@@ -185,7 +186,7 @@ class StreamingPageUpdateService {
     required PageProcessingData pageData,
     required int llmResultsCount,
     required double progress,
-    required StreamingStatus streamingStatus,
+    required ProcessingStatus streamingStatus,
   }) {
     // 전체 텍스트 생성
     final originalText = mixedUnits.map((unit) => unit.originalText).join(' ');
@@ -296,7 +297,7 @@ class StreamingPageUpdateService {
         units: results,
         sourceLanguage: pageData.sourceLanguage,
         targetLanguage: pageData.targetLanguage,
-        streamingStatus: StreamingStatus.completed,
+        streamingStatus: ProcessingStatus.completed,
         completedUnits: results.length,
         progress: 1.0,
       );
@@ -315,7 +316,7 @@ class StreamingPageUpdateService {
           'fullTranslatedText': completeProcessedText.fullTranslatedText,
           'sourceLanguage': completeProcessedText.sourceLanguage,
           'targetLanguage': completeProcessedText.targetLanguage,
-          'streamingStatus': StreamingStatus.completed.index,
+          'streamingStatus': ProcessingStatus.completed.index,
           'completedUnits': results.length,
           'progress': 1.0,
         },

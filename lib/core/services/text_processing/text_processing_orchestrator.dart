@@ -373,7 +373,7 @@ class TextProcessingOrchestrator {
         units: [],
         sourceLanguage: pageData.sourceLanguage,
         targetLanguage: pageData.targetLanguage,
-        streamingStatus: StreamingStatus.preparing,
+        streamingStatus: ProcessingStatus.preparing,
         completedUnits: 0,
         progress: 0.0,
       );

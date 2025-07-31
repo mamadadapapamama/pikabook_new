@@ -147,11 +147,11 @@ class PlanCard extends StatelessWidget {
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                PikaButton(
-                  text: '사용량 조회',
-                  variant: PikaButtonVariant.outline,
-                  size: PikaButtonSize.xs,
-                  onPressed: () => viewModel.showUsageDialog(context),
+            PikaButton(
+              text: '사용량 조회',
+              variant: PikaButtonVariant.outline,
+              size: PikaButtonSize.xs,
+              onPressed: () => viewModel.showUsageDialog(context),
                 ),
               ],
             )

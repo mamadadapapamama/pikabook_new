@@ -3,7 +3,6 @@ import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../features/home/coordinators/home_ui_coordinator.dart';
-import '../models/subscription_state.dart';
 import '../../../core/theme/tokens/color_tokens.dart';
 import '../../../core/theme/tokens/typography_tokens.dart';
 import '../../../core/theme/tokens/spacing_tokens.dart';
@@ -14,9 +13,7 @@ import '../../../core/services/subscription/unified_subscription_manager.dart';
 /// 사용량 확인 다이얼로그
 /// 현재 사용량과 플랜 정보를 표시합니다.
 class UsageDialog extends StatelessWidget {
-  final SubscriptionInfo subscriptionInfo;
-
-  const UsageDialog({Key? key, required this.subscriptionInfo}) : super(key: key);
+  const UsageDialog({super.key});
 
   @override
   Widget build(BuildContext context) {

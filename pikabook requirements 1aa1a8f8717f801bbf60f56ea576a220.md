@@ -190,7 +190,7 @@ Stories sorted by the priority order
                 - show translation only
                 - show extracted text only
                 - show both
-
+                
 - **As a user, I can create flash card for repetitive studying**
     - When user selects some of the extracted text, context menu will appear
         - highlight (this is flash card creator)
@@ -226,7 +226,7 @@ Stories sorted by the priority order
     - delete: user can delete the note
         - once selected, confirmation dialog will pop up
         - if user agrees to delete, it will be permenantly deleted
-
+        
 - **As a user, I can track my usage and upgrade when needed**
     - 실시간 사용량 표시 (OCR 페이지, TTS 요청)
     - 사용량 한도 도달 시 자동 알림

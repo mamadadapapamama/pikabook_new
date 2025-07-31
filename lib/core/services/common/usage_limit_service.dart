@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'dart:async';
-import '../../constants/plan_constants.dart';
+import '../../constants/subscription_constants.dart';
 import '../../models/subscription_state.dart';
 
 /// 🔄 사용량 제한 관리 서비스 (단순화된 버전)
@@ -458,9 +458,9 @@ class UsageLimitService {
       }
       
       // 2. 🎯 플랜 기반 제한 적용 (SubscriptionManager 사용)
-      final planType = subscriptionState.isPremiumOrTrial ? PlanConstants.PLAN_PREMIUM : PlanConstants.PLAN_FREE;
+      final planType = subscriptionState.isPremiumOrTrial ? SubscriptionConstants.PLAN_PREMIUM : SubscriptionConstants.PLAN_FREE;
       
-      final limits = PlanConstants.PLAN_LIMITS[planType];
+      final limits = SubscriptionConstants.PLAN_LIMITS[planType];
       if (limits != null) {
         final result = Map<String, int>.from(limits);
         
@@ -536,9 +536,9 @@ class UsageLimitService {
     };
   }
   
-  /// 기본 제한 값 (PlanConstants에서 가져오기)
+  /// 기본 제한 값 (SubscriptionConstants에서 가져오기)
   Map<String, int> _getDefaultLimits() {
-    return Map<String, int>.from(PlanConstants.PLAN_LIMITS[PlanConstants.PLAN_FREE]!);
+    return Map<String, int>.from(SubscriptionConstants.PLAN_LIMITS[SubscriptionConstants.PLAN_FREE]!);
   }
   
   /// 기본 사용량 정보 (설정 화면용)
@@ -630,9 +630,9 @@ class UsageLimitService {
     required SubscriptionState subscriptionState, // 🚨 외부에서 주입받도록 변경
   }) async {
     try {
-      final planType = subscriptionState.isPremiumOrTrial ? PlanConstants.PLAN_PREMIUM : PlanConstants.PLAN_FREE;
+      final planType = subscriptionState.isPremiumOrTrial ? SubscriptionConstants.PLAN_PREMIUM : SubscriptionConstants.PLAN_FREE;
       
-      if (planType != PlanConstants.PLAN_FREE) {
+      if (planType != SubscriptionConstants.PLAN_FREE) {
         debugPrint('Free 플랜이 아니므로 월간 초기화 건너뜀');
         return;
       }

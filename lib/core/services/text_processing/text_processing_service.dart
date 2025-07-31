@@ -46,7 +46,7 @@ class TextProcessingService {
       final firestoreText = await _getFromFirestore(pageId);
       if (firestoreText != null) {
         // 완성된 데이터만 캐시에 저장
-        if (firestoreText.streamingStatus == StreamingStatus.completed) {
+        if (firestoreText.streamingStatus == ProcessingStatus.completed) {
         await _saveToCache(pageId, firestoreText);
         if (kDebugMode) {
             debugPrint('✅ [Firestore → 캐시] ProcessedText 로드: $pageId');
@@ -82,17 +82,8 @@ class TextProcessingService {
       if (page.processedText != null && page.processedText!.isNotEmpty) {
         final streamingStatus = page.processedText!['streamingStatus'];
         if (streamingStatus != null) {
-          final status = StreamingStatus.values[streamingStatus as int];
-          switch (status) {
-            case StreamingStatus.completed:
-              return ProcessingStatus.completed;
-            case StreamingStatus.streaming:
-              return ProcessingStatus.translating;
-            case StreamingStatus.preparing:
-              return ProcessingStatus.textExtracted;
-            default:
-              return ProcessingStatus.textExtracted;
-          }
+          final status = ProcessingStatus.values[streamingStatus as int];
+          return status;
         }
       }
       
@@ -134,7 +125,7 @@ class TextProcessingService {
       final updatedText = existing.copyWith(mode: newMode);
       
       // 완성된 데이터만 캐시 업데이트
-      if (updatedText.streamingStatus == StreamingStatus.completed) {
+      if (updatedText.streamingStatus == ProcessingStatus.completed) {
       await _saveToCache(pageId, updatedText);
       }
       
@@ -216,7 +207,7 @@ class TextProcessingService {
           processedText = await _createProcessedTextFromPageData(page);
           
           if (kDebugMode) {
-            final streamingStatus = processedText?.streamingStatus ?? StreamingStatus.preparing;
+            final streamingStatus = processedText?.streamingStatus ?? ProcessingStatus.preparing;
             debugPrint('🔄 [리스너] processedText 파싱: $pageId (${streamingStatus.name})');
           }
         } else if (page.translatedText != null && page.translatedText!.isNotEmpty) {
@@ -230,7 +221,7 @@ class TextProcessingService {
         // 변경사항 확인 후 콜백 호출
         if (processedText != null && _hasProcessedTextChanged(_previousProcessedTexts[pageId], processedText)) {
           // 완성된 데이터만 캐시에 저장
-          if (processedText.streamingStatus == StreamingStatus.completed) {
+          if (processedText.streamingStatus == ProcessingStatus.completed) {
             await _saveToCache(pageId, processedText);
             if (kDebugMode) {
               debugPrint('💾 [리스너 → 캐시] 완성된 데이터 저장: $pageId');
@@ -375,7 +366,7 @@ class TextProcessingService {
         units: units,
       sourceLanguage: cachedData['sourceLanguage'] ?? 'zh-CN',
       targetLanguage: cachedData['targetLanguage'] ?? 'ko',
-      streamingStatus: StreamingStatus.completed, // 캐시된 데이터는 완성된 상태
+      streamingStatus: ProcessingStatus.completed, // 캐시된 데이터는 완성된 상태
     );
   }
   
@@ -383,7 +374,7 @@ class TextProcessingService {
   Future<void> _saveToCache(String pageId, ProcessedText processedText) async {
     try {
       // 완성된 데이터만 캐싱
-      if (processedText.streamingStatus != StreamingStatus.completed) {
+      if (processedText.streamingStatus != ProcessingStatus.completed) {
         if (kDebugMode) {
           debugPrint('⚠️ [캐시] 미완성 데이터는 캐싱 안함: $pageId (${processedText.streamingStatus.name})');
         }
@@ -474,12 +465,12 @@ class TextProcessingService {
       }
       
       // 스트리밍 상태 파싱
-      StreamingStatus streamingStatus = StreamingStatus.preparing;
+      ProcessingStatus streamingStatus = ProcessingStatus.preparing;
       if (processedData['streamingStatus'] != null) {
         try {
           final statusIndex = processedData['streamingStatus'] as int;
-          if (statusIndex >= 0 && statusIndex < StreamingStatus.values.length) {
-            streamingStatus = StreamingStatus.values[statusIndex];
+          if (statusIndex >= 0 && statusIndex < ProcessingStatus.values.length) {
+            streamingStatus = ProcessingStatus.values[statusIndex];
           }
         } catch (e) {
           // 파싱 실패 시 기본값 사용
@@ -571,7 +562,7 @@ class TextProcessingService {
       units: units,
       sourceLanguage: page.sourceLanguage,
       targetLanguage: page.targetLanguage,
-      streamingStatus: StreamingStatus.completed, // 호환성 모드는 완성된 상태
+      streamingStatus: ProcessingStatus.completed, // 호환성 모드는 완성된 상태
     );
   }
   
