@@ -3,18 +3,18 @@ import 'dart:collection';
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+// firebase_auth 제거됨 - 사용하지 않음
 import '../../../core/utils/timeout_manager.dart';
 import '../../../core/utils/error_handler.dart';
 import 'services/page_service.dart';
-import 'services/note_service.dart';
-import '../../../core/services/common/usage_limit_service.dart';
-import '../../../core/services/cache/cache_manager.dart';
+// note_service 제거됨 - 사용하지 않음
+// usage_limit_service 제거됨 - 사용하지 않음
+// cache_manager 제거됨 - 사용하지 않음
 import '../../core/models/text_unit.dart';
 import '../../core/models/processing_status.dart';
 import '../../core/models/processed_text.dart';
 import '../../../core/services/text_processing/streaming_receive_service.dart';
-import '../../../core/services/text_processing/streaming_page_update_service.dart';
+// StreamingPageUpdateService 제거됨 - 직접 구현
 import '../../core/models/page_processing_data.dart';
 import 'pre_llm_workflow.dart';
 
@@ -29,15 +29,11 @@ import 'pre_llm_workflow.dart';
 class PostLLMWorkflow {
   // 서비스 인스턴스들
   final PageService _pageService = PageService();
-  final NoteService _noteService = NoteService();
-  final UsageLimitService _usageLimitService = UsageLimitService();
-  final CacheManager _cacheManager = CacheManager();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FirebaseAuth _auth = FirebaseAuth.instance;
 
   // 새로운 전담 서비스들
   final StreamingReceiveService _streamingService = StreamingReceiveService();
-  final StreamingPageUpdateService _pageUpdateService = StreamingPageUpdateService();
+  // StreamingPageUpdateService 제거 - PageService 직접 사용
 
   // 처리 큐 (메모리 기반)
   static final Queue<PostProcessingJob> _processingQueue = Queue<PostProcessingJob>();
@@ -190,7 +186,8 @@ class PostLLMWorkflow {
               totalExpectedUnits = pageData.textSegments.length;
             }
             
-            await _pageUpdateService.updatePageWithStreamingResult(
+            // StreamingPageUpdateService 로직을 직접 구현
+            await _updatePageWithStreamingResultDirect(
               pageData: pageData,
               llmResults: pageResults,
               totalExpectedUnits: totalExpectedUnits,
@@ -546,6 +543,102 @@ class PostLLMWorkflow {
       if (kDebugMode) {
         debugPrint('❌ 페이지별 타임아웃 에러 기록 실패: $e');
       }
+    }
+  }
+
+  /// StreamingPageUpdateService 로직을 직접 구현
+  /// (중간 레이어 제거를 위해 핵심 로직만 추출)
+  Future<void> _updatePageWithStreamingResultDirect({
+    required PageProcessingData pageData,
+    required List<TextUnit> llmResults,
+    required int totalExpectedUnits,
+  }) async {
+    try {
+      // 진행률 계산
+      final progress = totalExpectedUnits > 0 
+          ? (llmResults.length / totalExpectedUnits).clamp(0.0, 1.0)
+          : 1.0;
+      final isCompleted = llmResults.length >= totalExpectedUnits;
+      
+      // 스트리밍 상태 결정
+      final streamingStatus = isCompleted ? ProcessingStatus.completed : ProcessingStatus.translating;
+
+      // TextUnit 처리 (서버에서 이미 완성된 데이터 사용)
+      final processedUnits = <TextUnit>[];
+      
+      if (pageData.mode == TextProcessingMode.paragraph) {
+        // Paragraph 모드: LLM 결과만 사용
+        processedUnits.addAll(llmResults);
+      } else {
+        // Segment 모드: LLM 결과 + 남은 OCR 세그먼트
+        processedUnits.addAll(llmResults);
+        
+        if (!isCompleted) {
+          // 남은 OCR 세그먼트를 대기 상태로 추가
+          final remainingCount = pageData.textSegments.length - llmResults.length;
+          if (remainingCount > 0) {
+            final remainingSegments = pageData.textSegments.skip(llmResults.length);
+            for (final segment in remainingSegments) {
+              processedUnits.add(TextUnit(
+                originalText: segment,
+                translatedText: null, // 번역 대기
+                pinyin: null,         // 병음 대기
+                sourceLanguage: pageData.sourceLanguage,
+                targetLanguage: pageData.targetLanguage,
+              ));
+            }
+          }
+        }
+      }
+
+      // 전체 텍스트 생성
+      final translatedText = processedUnits
+          .where((unit) => unit.translatedText?.isNotEmpty == true)
+          .map((unit) => unit.translatedText!)
+          .join(' ');
+      
+      final pinyinText = processedUnits
+          .where((unit) => unit.pinyin?.isNotEmpty == true)
+          .map((unit) => unit.pinyin!)
+          .join(' ');
+
+      final originalText = processedUnits.map((unit) => unit.originalText).join(' ');
+
+      // 페이지 업데이트 데이터
+      final updateData = <String, dynamic>{
+        'translatedText': translatedText,
+        'pinyin': pinyinText,
+        'processedText': {
+          'units': processedUnits.map((unit) => unit.toJson()).toList(),
+          'mode': pageData.mode.toString(),
+          'displayMode': TextDisplayMode.full.toString(),
+          'fullOriginalText': originalText,
+          'fullTranslatedText': translatedText,
+          'sourceLanguage': pageData.sourceLanguage,
+          'targetLanguage': pageData.targetLanguage,
+          'streamingStatus': streamingStatus.index,
+          'completedUnits': llmResults.length,
+          'progress': progress,
+        },
+        'status': isCompleted ? 'completed' : 'translating',
+      };
+
+      if (isCompleted) {
+        updateData['processedAt'] = FieldValue.serverTimestamp();
+      }
+
+      // PageService 직접 호출
+      await _pageService.updatePage(pageData.pageId, updateData);
+
+      if (kDebugMode && llmResults.length % 3 == 0) {
+        debugPrint('🔄 [직접 업데이트] ${pageData.pageId}: ${llmResults.length}/$totalExpectedUnits (${(progress * 100).toInt()}%)');
+      }
+
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ 직접 페이지 업데이트 실패: ${pageData.pageId}, $e');
+      }
+      rethrow;
     }
   }
 

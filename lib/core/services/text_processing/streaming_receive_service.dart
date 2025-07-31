@@ -1,17 +1,16 @@
 import 'dart:async';
-import 'dart:math' as math;
+// dart:math 제거됨 - 복잡한 유사도 계산 로직 제거
 import 'package:flutter/foundation.dart';
 import '../../models/text_unit.dart';
 import '../../models/page_processing_data.dart';
 import '../../models/processed_text.dart';
 import 'api_service.dart';
 
-/// **스트리밍 수신 & 분배 서비스**
-/// 서버 HTTP 스트리밍을 받아서 페이지별로 분배하는 역할
+/// **스트리밍 수신 서비스 (단순화됨)**
+/// 서버 HTTP 스트리밍을 받아서 직접 전달하는 역할
 /// - 네트워크 통신 (서버 ↔ 클라이언트)
-/// - 청크 데이터 파싱 및 TextUnit 변환
-/// - 다중 페이지 텍스트 유사도 분배
-/// - 스트리밍 결과 조율
+/// - 서버 응답 직접 사용 (변환 로직 제거)
+/// - 단순한 에러 처리
 
 class StreamingReceiveService {
   final ApiService _apiService = ApiService();
@@ -29,29 +28,20 @@ class StreamingReceiveService {
       debugPrint('🌊 [스트리밍] 번역 시작: ${textSegments.length}개 세그먼트');
     }
 
+    // 결과 추적
     final Map<String, List<TextUnit>> pageResults = {};
     int processedChunks = 0;
-
-    // Differential Update를 위한 페이지별 OCR 세그먼트 준비
-    final Map<String, List<String>> pageOcrSegments = {};
-    final processingMode = pages.isNotEmpty ? pages.first.mode : TextProcessingMode.segment;
     
-    // 페이지별 OCR 세그먼트 분리 저장
+    // 폴백 처리용 페이지 정보만 유지 (단순화)
+    final Map<String, List<String>> pageOcrSegments = {};
     for (final page in pages) {
       pageOcrSegments[page.pageId] = List.from(page.textSegments);
-    }
-    
-    if (kDebugMode && processingMode == TextProcessingMode.segment) {
-      debugPrint('🔄 [Differential Update] 활성화: 페이지별 OCR 세그먼트');
-      for (final entry in pageOcrSegments.entries) {
-        debugPrint('   📄 ${entry.key}: ${entry.value.length}개 세그먼트');
-      }
     }
 
     bool hasReceivedAnyChunk = false;
 
     try {
-      // 페이지별 세그먼트 정보 생성
+      // 서버 전송용 페이지 정보 (단순화됨)
       final pageSegments = _createPageSegments(pages);
       
       if (kDebugMode) {
@@ -88,45 +78,26 @@ class StreamingReceiveService {
           continue;
         }
 
-        // 정상 청크 처리 (Differential Update 적용)
+        // ✅ 단순화: 서버가 이미 완성된 데이터를 보내므로 직접 사용
         final pageId = chunkData['pageId'] as String?;
-        final pageSpecificSegments = pageId != null && pageOcrSegments.containsKey(pageId) 
-            ? pageOcrSegments[pageId] 
-            : null;
-            
-        // 세그먼트 모드에서 pageId가 없을 때 폴백 처리
-        List<String>? finalOriginalSegments;
-        if (processingMode == TextProcessingMode.segment) {
-          if (pageSpecificSegments != null) {
-            finalOriginalSegments = pageSpecificSegments;
-          } else if (pageOcrSegments.isNotEmpty) {
-            // 첫 번째 페이지의 세그먼트 사용 (폴백)
-            finalOriginalSegments = pageOcrSegments.values.first;
-          }
-        }
-            
-        final chunkUnits = _extractUnitsFromChunkData(
-          chunkData,
-          originalSegments: finalOriginalSegments,
-        );
         final chunkIndex = chunkData['chunkIndex'] as int;
         
+        // 서버에서 이미 완성된 TextUnit 배열을 직접 추출
+        final chunkUnits = _extractUnitsDirectly(chunkData);
+        
         if (kDebugMode) {
-          debugPrint('📦 청크 ${chunkIndex + 1} 처리: ${chunkUnits.length}개 유닛');
+          debugPrint('📦 청크 ${chunkIndex + 1} 처리: ${chunkUnits.length}개 유닛 (pageId: $pageId)');
         }
         
-        // 페이지 ID 기반 분배 (서버에서 제공)
+        // 서버가 제공한 pageId로 직접 분배 (복잡한 로직 제거)
         if (pageId != null) {
           pageResults.putIfAbsent(pageId, () => []);
           pageResults[pageId]!.addAll(chunkUnits);
-        } else {
-          // 기존 방식 (페이지 ID 없는 경우)
-        await _distributeUnitsToPages(
-          chunkUnits, 
-          pages, 
-          pageResults,
-          isFirstChunk: chunkIndex == 0,
-        );
+        } else if (pages.isNotEmpty) {
+          // pageId가 없는 경우 첫 번째 페이지에 할당 (폴백)
+          final firstPageId = pages.first.pageId;
+          pageResults.putIfAbsent(firstPageId, () => []);
+          pageResults[firstPageId]!.addAll(chunkUnits);
         }
         
         processedChunks++;
@@ -146,7 +117,7 @@ class StreamingReceiveService {
         // 완료 확인
         if (isComplete) {
           if (kDebugMode) {
-            debugPrint('✅ [스트리밍] 완료: ${processedChunks}개 청크, ${pageResults.length}개 페이지');
+            debugPrint('✅ [스트리밍] 완료: $processedChunks개 청크, ${pageResults.length}개 페이지');
           }
           break;
         }
@@ -170,137 +141,7 @@ class StreamingReceiveService {
     }
   }
 
-  /// LLM 결과를 페이지별로 순차적으로 분배
-  /// 
-  /// **새로운 로직:**
-  /// - 텍스트 유사도 비교 제거
-  /// - 순서대로 페이지별 누적
-  /// - LLM이 재배치/병합한 결과를 그대로 반영
-  Future<void> _distributeUnitsToPages(
-    List<TextUnit> chunkUnits,
-    List<PageProcessingData> pages,
-    Map<String, List<TextUnit>> pageResults, {
-    bool isFirstChunk = false,
-  }) async {
-    if (chunkUnits.isEmpty || pages.isEmpty) return;
-    
-    if (pages.length == 1) {
-      // 단일 페이지: LLM 결과를 순차적으로 누적
-      final pageId = pages.first.pageId;
-      pageResults.putIfAbsent(pageId, () => []);
-      pageResults[pageId]!.addAll(chunkUnits);
-      
-      if (kDebugMode) {
-        debugPrint('✅ 단일 페이지 순차 누적: ${pageId} (+${chunkUnits.length}개, 총 ${pageResults[pageId]!.length}개)');
-      }
-    } else {
-      // 다중 페이지: OCR 세그먼트 순서 기반 순차 분배
-      await _distributeUnitsToMultiplePages(chunkUnits, pages, pageResults);
-    }
-  }
-
-  /// 다중 페이지에 유닛 분배 (기준점 비교 방식)
-  Future<void> _distributeUnitsToMultiplePages(
-    List<TextUnit> chunkUnits,
-    List<PageProcessingData> pages,
-    Map<String, List<TextUnit>> pageResults,
-  ) async {
-    // 각 페이지의 기준점 생성 (첫 번째 + 마지막 세그먼트)
-    final pageMarkers = <String, PageMarker>{};
-    
-    for (final page in pages) {
-      if (page.textSegments.isNotEmpty) {
-        pageMarkers[page.pageId] = PageMarker(
-          pageId: page.pageId,
-          firstSegment: page.textSegments.first,
-          lastSegment: page.textSegments.last,
-          totalSegments: page.textSegments.length,
-        );
-      }
-    }
-    
-    if (kDebugMode) {
-      debugPrint('📄 다중 페이지 분배 (기준점 방식): ${chunkUnits.length}개 LLM 유닛');
-      for (final marker in pageMarkers.values) {
-        debugPrint('   📄 ${marker.pageId}: "${marker.firstSegment}" ... "${marker.lastSegment}" (${marker.totalSegments}개)');
-      }
-    }
-    
-    // LLM 유닛을 기준점 비교로 페이지별 분배
-      for (final unit in chunkUnits) {
-      final assignedPageId = _findMatchingPage(unit, pageMarkers.values.toList());
-      
-      if (assignedPageId != null) {
-        pageResults.putIfAbsent(assignedPageId, () => []);
-        pageResults[assignedPageId]!.add(unit);
-      } else {
-        // 매칭되지 않는 경우 첫 번째 페이지에 할당 (폴백)
-        final fallbackPageId = pages.first.pageId;
-        pageResults.putIfAbsent(fallbackPageId, () => []);
-        pageResults[fallbackPageId]!.add(unit);
-        
-        if (kDebugMode) {
-          debugPrint('⚠️ 매칭 실패, 폴백 할당: "${unit.originalText}" → ${fallbackPageId}');
-        }
-        }
-      }
-      
-      if (kDebugMode) {
-      debugPrint('✅ 다중 페이지 분배 완료:');
-      for (final entry in pageResults.entries) {
-        debugPrint('   📄 ${entry.key}: ${entry.value.length}개 유닛');
-      }
-    }
-  }
-
-  /// LLM 유닛이 어느 페이지에 속하는지 찾기
-  String? _findMatchingPage(TextUnit unit, List<PageMarker> pageMarkers) {
-    final unitText = unit.originalText.trim();
-    
-    // 1. 정확한 포함 관계 확인 (첫 번째 또는 마지막 세그먼트와 일치)
-    for (final marker in pageMarkers) {
-      if (unitText.contains(marker.firstSegment.trim()) || 
-          unitText.contains(marker.lastSegment.trim()) ||
-          marker.firstSegment.trim().contains(unitText) ||
-          marker.lastSegment.trim().contains(unitText)) {
-        return marker.pageId;
-      }
-    }
-    
-    // 2. 부분 문자열 유사도 확인 (70% 이상 일치)
-    double maxSimilarity = 0.0;
-    String? bestMatchPageId;
-    
-    for (final marker in pageMarkers) {
-      final firstSimilarity = _calculateSimilarity(unitText, marker.firstSegment.trim());
-      final lastSimilarity = _calculateSimilarity(unitText, marker.lastSegment.trim());
-      final maxPageSimilarity = math.max(firstSimilarity, lastSimilarity);
-      
-      if (maxPageSimilarity > maxSimilarity && maxPageSimilarity >= 0.7) {
-        maxSimilarity = maxPageSimilarity;
-        bestMatchPageId = marker.pageId;
-      }
-    }
-    
-    return bestMatchPageId;
-  }
-
-  /// 간단한 문자열 유사도 계산 (공통 문자 비율)
-  double _calculateSimilarity(String text1, String text2) {
-    if (text1.isEmpty || text2.isEmpty) return 0.0;
-    
-    final shorter = text1.length <= text2.length ? text1 : text2;
-    final longer = text1.length > text2.length ? text1 : text2;
-    
-    int matchCount = 0;
-    for (int i = 0; i < shorter.length; i++) {
-      if (longer.contains(shorter[i])) {
-        matchCount++;
-      }
-    }
-    
-    return matchCount / shorter.length;
-  }
+  // ✅ 복잡한 분배 로직 제거됨 - 서버가 이미 pageId를 제공하므로 불필요
   
   /// 페이지별 세그먼트 정보 생성 (서버 전송용)
   List<Map<String, dynamic>>? _createPageSegments(List<PageProcessingData> pages) {
@@ -342,122 +183,30 @@ class StreamingReceiveService {
     return pageSegments;
   }
 
-  /// 스트리밍 청크 데이터에서 TextUnit 리스트 추출 (Differential Update 최적화)
-  List<TextUnit> _extractUnitsFromChunkData(
-    Map<String, dynamic> chunkData, {
-    List<String>? originalSegments, // OCR 원본 세그먼트 (differential update용)
-  }) {
+  /// ✅ 단순화: 서버 응답에서 TextUnit 직접 추출 (변환 로직 제거)
+  List<TextUnit> _extractUnitsDirectly(Map<String, dynamic> chunkData) {
     try {
-      if (chunkData['units'] == null) return [];
-
-      final units = chunkData['units'] as List;
-      
-      // Differential Update 방식인지 확인 (서버 응답 기반)
-      if (originalSegments != null && _isDifferentialUpdate(units, chunkData)) {
-        return _buildUnitsFromDifferentialUpdate(units, originalSegments);
+      final units = chunkData['units'] as List?;
+      if (units == null || units.isEmpty) {
+        return [];
       }
-      
-      // 기존 방식: 서버에서 모든 데이터 포함 (호환성)
-      return _buildUnitsFromFullData(units);
-      
+
+      // 서버에서 이미 완성된 TextUnit 구조를 그대로 사용
+      return units.map((unitData) {
+        final unitMap = Map<String, dynamic>.from(unitData as Map);
+        return TextUnit.fromJson(unitMap);
+      }).toList();
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('❌ 청크 데이터 파싱 실패: $e');
+        debugPrint('❌ TextUnit 직접 추출 실패: $e');
       }
       return [];
     }
   }
 
-  /// Differential Update 방식인지 확인 (서버 응답 기반)
-  bool _isDifferentialUpdate(List units, Map<String, dynamic> chunkData) {
-    if (units.isEmpty) return false;
-    
-    // 1. 서버에서 명시적으로 모드를 알려주는 경우
-    final serverMode = chunkData['mode'] as String?;
-    
-    if (serverMode == 'differential') {
-      return true;
-    }
-    if (serverMode == 'full') {
-      return false;
-    }
-    
-    // 2. 클라이언트에서 추론 (기존 로직)
-    final firstUnit = units.first;
-    final hasIndex = firstUnit['index'] != null;
-    final hasOriginal = firstUnit['original'] != null || firstUnit['originalText'] != null;
-    
-    final isDifferential = hasIndex && !hasOriginal;
-    
-    if (kDebugMode) {
-      debugPrint('🔍 [Differential Update] 감지: $isDifferential (서버모드: $serverMode)');
-    }
-    
-    return isDifferential;
-  }
+  // ✅ 복잡한 추출 로직 제거됨 - _extractUnitsDirectly()로 대체
 
-  /// Differential Update 방식으로 TextUnit 생성
-  List<TextUnit> _buildUnitsFromDifferentialUpdate(
-    List units, 
-    List<String> originalSegments,
-  ) {
-    final textUnits = <TextUnit>[];
-    
-    if (kDebugMode) {
-      debugPrint('🔄 [Differential Update] 시작: ${units.length}개 유닛, ${originalSegments.length}개 OCR 세그먼트');
-    }
-    
-    for (int i = 0; i < units.length; i++) {
-      final unitData = units[i];
-      final index = unitData['index'] as int?;
-      
-      if (index == null || index < 0 || index >= originalSegments.length) {
-        if (kDebugMode) {
-          debugPrint('⚠️ 잘못된 인덱스: $index (범위: 0-${originalSegments.length - 1})');
-        }
-        continue;
-      }
-      
-      final originalText = originalSegments[index];
-      
-      // OCR 원본 세그먼트 + 서버 번역/병음
-      final textUnit = TextUnit(
-        originalText: originalText, // ✅ 기존 OCR 데이터 사용
-        translatedText: unitData['translation'] ?? unitData['translatedText'] ?? '',
-        pinyin: unitData['pinyin'] ?? '',
-        sourceLanguage: unitData['sourceLanguage'] ?? 'zh-CN',
-        targetLanguage: unitData['targetLanguage'] ?? 'ko',
-        segmentType: _parseSegmentType(unitData['type'] ?? unitData['segmentType']),
-      );
-      
-      textUnits.add(textUnit);
-    }
-    
-    if (kDebugMode) {
-      debugPrint('✅ [Differential Update] 완료: ${textUnits.length}개 유닛 생성');
-    }
-    
-    return textUnits;
-  }
-
-  /// 기존 방식으로 TextUnit 생성 (호환성)
-  List<TextUnit> _buildUnitsFromFullData(List units) {
-    return units.map<TextUnit>((unitData) {
-      // 서버 응답 필드명 그대로 사용 (original, translation, pinyin)
-      final original = unitData['original'] ?? unitData['originalText'] ?? '';
-      final translation = unitData['translation'] ?? unitData['translatedText'] ?? '';
-      final pinyin = unitData['pinyin'] ?? '';
-      
-      return TextUnit(
-        originalText: original,
-        translatedText: translation,
-        pinyin: pinyin,
-        sourceLanguage: unitData['sourceLanguage'] ?? 'zh-CN',
-        targetLanguage: unitData['targetLanguage'] ?? 'ko',
-        segmentType: _parseSegmentType(unitData['type'] ?? unitData['segmentType']),
-      );
-    }).toList();
-  }
+  // ✅ 복잡한 Differential Update 로직 제거됨 - 서버가 이미 완성된 데이터 제공
 
   /// 스트리밍 실패 시 폴백 결과 생성
   Stream<StreamingReceiveResult> _createFallbackResults(
@@ -492,18 +241,7 @@ class StreamingReceiveService {
     );
   }
 
-  /// 문자열에서 SegmentType 파싱
-  SegmentType _parseSegmentType(String? typeString) {
-    if (typeString == null) return SegmentType.unknown;
-    
-    try {
-      return SegmentType.values.firstWhere(
-        (e) => e.name == typeString.toLowerCase()
-      );
-    } catch (e) {
-      return SegmentType.unknown;
-    }
-  }
+  // ✅ _parseSegmentType 제거됨 - 서버에서 이미 완성된 데이터 제공
 }
 
 /// 페이지 기준점 (첫 번째/마지막 세그먼트)
