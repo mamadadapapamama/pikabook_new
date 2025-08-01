@@ -67,6 +67,18 @@ class StreamingReceiveService {
         
         if (kDebugMode) {
           debugPrint('📦 [스트리밍] 청크 수신: ${chunkData['chunkIndex'] + 1}/${chunkData['totalChunks']}');
+          debugPrint('🔍 [서버 응답] 전체 chunkData 키: ${chunkData.keys}');
+          if (chunkData['units'] != null) {
+            final units = chunkData['units'] as List;
+            if (units.isNotEmpty) {
+              final firstUnit = units.first as Map<String, dynamic>;
+              debugPrint('🔍 [서버 응답] 첫 번째 유닛 키: ${firstUnit.keys}');
+              debugPrint('🔍 [서버 응답] 첫 번째 유닛 데이터:');
+              firstUnit.forEach((key, value) {
+                debugPrint('   $key: $value');
+              });
+            }
+          }
         }
 
         // 오류 청크 처리
@@ -82,8 +94,17 @@ class StreamingReceiveService {
         final pageId = chunkData['pageId'] as String?;
         final chunkIndex = chunkData['chunkIndex'] as int;
         
-        // 서버에서 이미 완성된 TextUnit 배열을 직접 추출
-        final chunkUnits = _extractUnitsDirectly(chunkData);
+        // 서버에서 이미 완성된 TextUnit 배열을 직접 추출 (OCR 원본 텍스트와 매핑)
+        final chunkUnits = _extractUnitsDirectly(chunkData, textSegments);
+        
+        if (kDebugMode && chunkUnits.isNotEmpty) {
+          final firstUnit = chunkUnits.first;
+          debugPrint('🔍 추출된 첫 번째 유닛:');
+          debugPrint('   원문: "${firstUnit.originalText}"');
+          debugPrint('   번역: "${firstUnit.translatedText}"');
+          debugPrint('   병음: "${firstUnit.pinyin}"');
+          debugPrint('   타입: ${firstUnit.segmentType}');
+        }
         
         if (kDebugMode) {
           debugPrint('📦 청크 ${chunkIndex + 1} 처리: ${chunkUnits.length}개 유닛 (pageId: $pageId)');
@@ -184,17 +205,32 @@ class StreamingReceiveService {
   }
 
   /// ✅ 단순화: 서버 응답에서 TextUnit 직접 추출 (변환 로직 제거)
-  List<TextUnit> _extractUnitsDirectly(Map<String, dynamic> chunkData) {
+  List<TextUnit> _extractUnitsDirectly(Map<String, dynamic> chunkData, List<String> textSegments) {
     try {
       final units = chunkData['units'] as List?;
       if (units == null || units.isEmpty) {
         return [];
       }
 
-      // 서버에서 이미 완성된 TextUnit 구조를 그대로 사용
+      // 서버 응답 필드를 클라이언트 형식으로 변환
       return units.map((unitData) {
-        final unitMap = Map<String, dynamic>.from(unitData as Map);
-        return TextUnit.fromJson(unitMap);
+        final serverUnit = Map<String, dynamic>.from(unitData as Map);
+        
+        // 서버의 index를 사용해서 원본 텍스트 매핑
+        final index = serverUnit['index'] as int? ?? 0;
+        final originalText = (index < textSegments.length) ? textSegments[index] : '';
+        
+        // 서버 필드명 -> 클라이언트 필드명 매핑
+        final clientUnit = <String, dynamic>{
+          'originalText': originalText, // OCR 텍스트 세그먼트에서 가져오기
+          'translatedText': serverUnit['translation'], // translation -> translatedText
+          'pinyin': serverUnit['pinyin'],
+          'sourceLanguage': serverUnit['sourceLanguage'] ?? 'zh-CN',
+          'targetLanguage': serverUnit['targetLanguage'] ?? 'ko',
+          'segmentType': 'sentence', // 기본값으로 sentence 설정
+        };
+        
+        return TextUnit.fromJson(clientUnit);
       }).toList();
     } catch (e) {
       if (kDebugMode) {

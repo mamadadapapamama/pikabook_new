@@ -324,38 +324,17 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           builder: (context, viewModel, _) {
             final hasNotes = viewModel.notes.isNotEmpty;
             
-            // 🚨 FutureBuilder 전에 먼저 로그 출력
-            if (kDebugMode) {
-              debugPrint('🏠 [HomeScreen] 배너 상태 (FutureBuilder 전):');
-              debugPrint('   - 구독 상태: ${widget.subscriptionState.toString()}');
-              debugPrint('   - Plan: ${widget.subscriptionState.plan.id} (isPremium: ${widget.subscriptionState.plan.isPremium})');
-              debugPrint('   - Status: ${widget.subscriptionState.status.name}');
-              debugPrint('   - HasUsedTrial: ${widget.subscriptionState.hasUsedTrial}');
-              debugPrint('   - 🎯 원본 배너 리스트: ${widget.subscriptionState.activeBanners}');
-            }
-
             final convertedBanners = widget.subscriptionState.activeBanners
                 .map((name) {
                   try {
-                    final bannerType = BannerType.values.firstWhere((e) => e.name == name);
-                    if (kDebugMode) {
-                      debugPrint('   - ✅ 배너 변환 성공: "$name" → ${bannerType.name}');
-                    }
-                    return bannerType;
+                    return BannerType.values.firstWhere((e) => e.name == name);
                   } catch (e) {
-                    if (kDebugMode) {
-                      debugPrint('   - ❌ 알 수 없는 배너 타입: "$name"');
-                    }
                     return null;
                   }
                 })
                 .where((e) => e != null)
                 .cast<BannerType>()
                 .toList();
-
-            if (kDebugMode) {
-              debugPrint('   - 변환된 BannerType 목록: ${convertedBanners.map((e) => e.name).toList()}');
-            }
 
             // 🎯 Feature Flag에 따라 배너 표시 여부 결정
             return FutureBuilder<List<Widget>>(
@@ -368,16 +347,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     )
                   : Future.value(<Widget>[]), // 빈 배너 리스트 반환
               builder: (context, bannerSnapshot) {
-                if (kDebugMode) {
-                  debugPrint('🏠 [HomeScreen] FutureBuilder 결과:');
-                  debugPrint('   - connectionState: ${bannerSnapshot.connectionState}');
-                  debugPrint('   - hasData: ${bannerSnapshot.hasData}');
-                  debugPrint('   - 배너 위젯 수: ${bannerSnapshot.data?.length ?? 0}');
-                  if (bannerSnapshot.hasError) {
-                    debugPrint('   - 에러: ${bannerSnapshot.error}');
-                  }
-                }
-
                 final bannerWidgets = bannerSnapshot.data ?? <Widget>[];
 
                 // 🎯 Feature Flag에 따라 배너 필터링
