@@ -13,6 +13,7 @@ enum SegmentType {
   dialogue,     // 대화문
   example,      // 예문 또는 사용 예시
   explanation,  // 문법 설명이나 해설
+  sentence,     // 일반 문장 (Segment 모드용)
   unknown,      // 타입 불명 (기본값)
 }
 
@@ -151,6 +152,8 @@ class TextUnit {
         return '예문';
       case SegmentType.explanation:
         return '설명';
+      case SegmentType.sentence:
+        return '문장';
       case SegmentType.unknown:
         return '';
     }

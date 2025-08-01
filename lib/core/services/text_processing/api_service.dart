@@ -140,7 +140,7 @@ class ApiService {
         if (processingMode != null) 'processingMode': processingMode,
       };
 
-      // 세그먼트 모드일 때만 textSegments 추가
+      // 원래 방식으로 복원
       if (textSegments.isNotEmpty) {
         requestBody['textSegments'] = textSegments;
       }
@@ -154,7 +154,7 @@ class ApiService {
 
       print('📤 [API] 서버 요청 전송 시작');
       print('   URL: $url');
-        final prettyJson = const JsonEncoder.withIndent('  ').convert(requestBody);
+      final prettyJson = const JsonEncoder.withIndent('  ').convert(requestBody);
       print('   Body: $prettyJson');
 
       final client = http.Client();

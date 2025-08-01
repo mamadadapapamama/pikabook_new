@@ -44,55 +44,21 @@ class LocalCacheStorage<T> implements CacheStorage<T>, BinaryCacheStorage {
     if (_isInitialized) return;
 
     try {
-      if (kDebugMode) {
-        debugPrint('📦 LocalCacheStorage($_namespace) 초기화 시작');
-      }
-
-      if (kDebugMode) {
-        debugPrint('📦 LocalCacheStorage($_namespace) SharedPreferences 요청 중...');
-      }
+      // 🚀 성능 개선: 상세 로그 제거, 핵심 정보만 출력
       _prefs = await SharedPreferences.getInstance();
-      if (kDebugMode) {
-        debugPrint('📦 LocalCacheStorage($_namespace) SharedPreferences 완료');
-      }
-
-      if (kDebugMode) {
-        if (kDebugMode) {
-      debugPrint('📦 LocalCacheStorage($_namespace) 캐시 디렉토리 생성 중...');
-    }
-      }
       _cacheDir = await _getCacheDirectory();
       await _cacheDir!.create(recursive: true);
-      if (kDebugMode) {
-        debugPrint('📦 LocalCacheStorage($_namespace) 캐시 디렉토리 생성 완료: ${_cacheDir!.path}');
-      }
-      
-      if (kDebugMode) {
-        debugPrint('📦 LocalCacheStorage($_namespace) 메타데이터 로드 중...');
-      }
       await _loadMetadata();
-      if (kDebugMode) {
-        debugPrint('📦 LocalCacheStorage($_namespace) 메타데이터 로드 완료');
-      }
-
-      if (kDebugMode) {
-        debugPrint('📦 LocalCacheStorage($_namespace) 만료된 캐시 정리 중...');
-      }
       await cleanupExpired();
-      if (kDebugMode) {
-        debugPrint('📦 LocalCacheStorage($_namespace) 만료된 캐시 정리 완료');
-      }
       
       _isInitialized = true;
       
       if (kDebugMode) {
-        debugPrint('📦 LocalCacheStorage($_namespace) 초기화 완료');
-        debugPrint('   항목: ${_metadata.length}개');
-        debugPrint('   크기: ${_formatSize(await getSize())}');
+        debugPrint('📦 $_namespace 캐시 초기화 완료: ${_metadata.length}개 항목, ${_formatSize(await getSize())}');
       }
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('❌ LocalCacheStorage($_namespace) 초기화 실패: $e');
+        debugPrint('❌ $_namespace 캐시 초기화 실패: $e');
       }
       rethrow;
     }
@@ -325,47 +291,22 @@ class LocalCacheStorage<T> implements CacheStorage<T>, BinaryCacheStorage {
     if (!_isInitialized) return;
     
     try {
-      if (kDebugMode) {
-        debugPrint('📦 LocalCacheStorage($_namespace) 만료된 캐시 검색 시작');
-      }
-      
-      final now = DateTime.now();
       final expiredKeys = _metadata.entries
           .where((entry) => entry.value.isExpired)
           .map((entry) => entry.key)
           .toList();
 
-      if (kDebugMode) {
-        debugPrint('📦 LocalCacheStorage($_namespace) 만료된 캐시 검색 완료: ${expiredKeys.length}개 발견');
-      }
-
       if (expiredKeys.isNotEmpty) {
-        if (kDebugMode) {
-          debugPrint('📦 LocalCacheStorage($_namespace) 만료된 캐시 삭제 시작');
-        }
-        
         for (final key in expiredKeys) {
           await _prefs!.remove(key);
           _memoryCache.remove(key);
           _metadata.remove(key);
         }
-
-        if (kDebugMode) {
-          debugPrint('📦 LocalCacheStorage($_namespace) 만료된 캐시 삭제 완료');
-        }
-
-        if (kDebugMode) {
-          debugPrint('📦 LocalCacheStorage($_namespace) 메타데이터 저장 시작');
-        }
         
         await _saveMetadata();
         
         if (kDebugMode) {
-          debugPrint('📦 LocalCacheStorage($_namespace) 메타데이터 저장 완료');
-        }
-        
-        if (kDebugMode) {
-          debugPrint('📦 만료된 캐시 정리($_namespace): ${expiredKeys.length}개');
+          debugPrint('📦 $_namespace 만료된 캐시 정리 완료: ${expiredKeys.length}개');
         }
       }
     } catch (e) {
@@ -582,37 +523,13 @@ class LocalCacheStorage<T> implements CacheStorage<T>, BinaryCacheStorage {
 
   Future<void> _loadMetadata() async {
     try {
-      if (kDebugMode) {
-        debugPrint('📦 LocalCacheStorage($_namespace) 메타데이터 JSON 읽기 시작');
-      }
-      
       final metadataJson = _prefs!.getString('${_namespace}:_metadata');
       
-      if (kDebugMode) {
-        debugPrint('📦 LocalCacheStorage($_namespace) 메타데이터 JSON 읽기 완료: ${metadataJson != null ? '데이터 있음' : '데이터 없음'}');
-      }
-      
       if (metadataJson != null) {
-        if (kDebugMode) {
-          debugPrint('📦 LocalCacheStorage($_namespace) JSON 파싱 시작');
-        }
-        
         final metadataMap = json.decode(metadataJson) as Map<String, dynamic>;
-        
-        if (kDebugMode) {
-          debugPrint('📦 LocalCacheStorage($_namespace) JSON 파싱 완료: ${metadataMap.length}개 항목');
-        }
-        
-        if (kDebugMode) {
-          debugPrint('📦 LocalCacheStorage($_namespace) 메타데이터 객체 생성 시작');
-        }
         
         for (final entry in metadataMap.entries) {
           _metadata[entry.key] = CacheMetadata.fromJson(entry.value as Map<String, dynamic>);
-        }
-        
-        if (kDebugMode) {
-          debugPrint('📦 LocalCacheStorage($_namespace) 메타데이터 객체 생성 완료');
         }
       }
     } catch (e) {

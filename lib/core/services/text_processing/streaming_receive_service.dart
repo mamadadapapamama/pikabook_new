@@ -94,16 +94,34 @@ class StreamingReceiveService {
         final pageId = chunkData['pageId'] as String?;
         final chunkIndex = chunkData['chunkIndex'] as int;
         
+        // 🔍 문단모드 번역 누락 - 청크 데이터 확인
+        if (kDebugMode) {
+          debugPrint('🔍 [청크] 전체 chunkData:');
+          debugPrint('   chunkIndex: ${chunkData['chunkIndex']}');
+          debugPrint('   pageId: ${chunkData['pageId']}');
+          debugPrint('   units 존재: ${chunkData.containsKey('units')}');
+          if (chunkData['units'] != null) {
+            final units = chunkData['units'] as List;
+            debugPrint('   units 개수: ${units.length}');
+            if (units.isNotEmpty) {
+              debugPrint('   첫 번째 유닛: ${units.first}');
+            }
+          }
+        }
+        
         // 서버에서 이미 완성된 TextUnit 배열을 직접 추출 (OCR 원본 텍스트와 매핑)
         final chunkUnits = _extractUnitsDirectly(chunkData, textSegments);
         
-        if (kDebugMode && chunkUnits.isNotEmpty) {
-          final firstUnit = chunkUnits.first;
-          debugPrint('🔍 추출된 첫 번째 유닛:');
-          debugPrint('   원문: "${firstUnit.originalText}"');
-          debugPrint('   번역: "${firstUnit.translatedText}"');
-          debugPrint('   병음: "${firstUnit.pinyin}"');
-          debugPrint('   타입: ${firstUnit.segmentType}');
+        if (kDebugMode) {
+          debugPrint('🔍 [추출] 결과: ${chunkUnits.length}개 유닛');
+          if (chunkUnits.isNotEmpty) {
+            final firstUnit = chunkUnits.first;
+            debugPrint('   첫 번째 유닛:');
+            debugPrint('     원문: "${firstUnit.originalText}"');
+            debugPrint('     번역: "${firstUnit.translatedText}"');
+            debugPrint('     병음: "${firstUnit.pinyin}"');
+            debugPrint('     타입: ${firstUnit.segmentType}');
+          }
         }
         
         if (kDebugMode) {
@@ -216,19 +234,51 @@ class StreamingReceiveService {
       return units.map((unitData) {
         final serverUnit = Map<String, dynamic>.from(unitData as Map);
         
-        // 서버의 index를 사용해서 원본 텍스트 매핑
-        final index = serverUnit['index'] as int? ?? 0;
-        final originalText = (index < textSegments.length) ? textSegments[index] : '';
+        // 🎯 문단모드 지원: 서버의 original 필드 우선 사용
+        String originalText;
+        final serverOriginal = serverUnit['original']?.toString().trim();
+        
+        if (serverOriginal != null && serverOriginal.isNotEmpty) {
+          // 서버에서 original 필드를 제공하는 경우 (paragraph 모드)
+          originalText = serverOriginal;
+          if (kDebugMode) {
+            debugPrint('🔍 [매핑] 서버 original 사용: "$originalText"');
+          }
+        } else {
+          // index를 사용한 매핑 (segment 모드)
+          final index = serverUnit['index'] as int? ?? 0;
+          originalText = (index < textSegments.length) ? textSegments[index] : '';
+          if (kDebugMode) {
+            debugPrint('🔍 [매핑] index 매핑 사용: index=$index, text="$originalText"');
+          }
+        }
+        
+        // 🔍 문단모드 번역 누락 디버깅
+        if (kDebugMode) {
+          debugPrint('🔍 [매핑] 서버 유닛 상세:');
+          debugPrint('   translation: "${serverUnit['translation']}"');
+          debugPrint('   original: "${serverUnit['original']}"');
+          debugPrint('   type: "${serverUnit['type']}"');
+          debugPrint('   pinyin: "${serverUnit['pinyin']}"');
+          debugPrint('   index: ${serverUnit['index']}');
+        }
         
         // 서버 필드명 -> 클라이언트 필드명 매핑
         final clientUnit = <String, dynamic>{
           'originalText': originalText, // OCR 텍스트 세그먼트에서 가져오기
-          'translatedText': serverUnit['translation'], // translation -> translatedText
-          'pinyin': serverUnit['pinyin'],
+          'translatedText': serverUnit['translation'] ?? '', // translation -> translatedText
+          'pinyin': serverUnit['pinyin'] ?? '', // null일 경우 빈 문자열
           'sourceLanguage': serverUnit['sourceLanguage'] ?? 'zh-CN',
           'targetLanguage': serverUnit['targetLanguage'] ?? 'ko',
-          'segmentType': 'sentence', // 기본값으로 sentence 설정
+          'segmentType': serverUnit['type'] ?? serverUnit['segmentType'] ?? 'sentence', // 서버에서 받은 타입 사용, 없으면 sentence
         };
+        
+        if (kDebugMode) {
+          debugPrint('🔍 [매핑] 클라이언트 결과:');
+          debugPrint('   originalText: "${clientUnit['originalText']}"');
+          debugPrint('   translatedText: "${clientUnit['translatedText']}"');
+          debugPrint('   segmentType: "${clientUnit['segmentType']}"');
+        }
         
         return TextUnit.fromJson(clientUnit);
       }).toList();
