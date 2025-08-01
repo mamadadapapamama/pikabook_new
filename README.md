@@ -1,16 +1,45 @@
-# pikabook_new
+# 🚀 Pikabook Development Branch
+This is the main development branch where reviewed and approved code is integrated.
 
-A new Flutter project.
 
-## Getting Started
+## 📋 Branch Usage
 
-This project is a starting point for a Flutter application.
+- Purpose: Integration of reviewed features and bug fixes
+- Status: Development in progress
+- Merge to: main (after thorough testing)
 
-A few resources to get you started if this is your first Flutter project:
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+## 🌿 Feature Development
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+When working on new features:
+``` 
+1. Create a new branch: dev/feature/your-feature-name
+2. Develop your feature
+3. Create a Pull Request to merge back into dev
+4. Wait for code review and approval
+```
+
+
+**Branch Naming Convention**
+- dev/feature/user_authentication
+- dev/feature/payment_system  
+- dev/feature/dashboard_ui
+
+
+
+## ⚠️ Important Rules
+
+- Never push directly to this branch
+- All changes must go through Pull Requests
+- Code must be reviewed before merging
+- Test your feature before creating PR
+- Keep commits clean and follow commit convention
+
+
+
+## 🔄 Workflow
+
+- `dev/feature/your-feature` → PR → dev
+- dev → PR → main (for releases)
+
+  
